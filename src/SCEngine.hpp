@@ -1,5 +1,7 @@
 #pragma once
 #include<string>
+#include "matrix_loader.hpp"
+#include<atomic>
 
 namespace sparsecoding {
 class SCEngine {
@@ -10,7 +12,8 @@ class SCEngine {
         int getM();
         int getN();
     private:
-        int client_id;
-        std::string data_file;
+        std::atomic<int> thread_counter_;
+        int client_id_;
+        MatrixLoader matrix_loader_;
 };
 };
