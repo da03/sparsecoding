@@ -77,17 +77,20 @@ int MatrixLoader::GetClientN() {
     return client_n_;
 }
 
-void MatrixLoader::GetCol(int j_client, int & j, std::vector<float> & col){
+bool MatrixLoader::GetCol(int j_client, int & j, std::vector<float> & col){
+    if (client_n_ == 0)
+        return false;
     std::unique_lock<std::mutex> lck (*(mtx_+j_client));
     col = data_[j_client];
     j = j_client * num_clients_ + client_id_;
+    return true;
 }
 
-bool MatrixLoader::GetRandCol(int & j, std::vector<float> & col) {
+bool MatrixLoader::GetRandCol(int & j_client, int & j, std::vector<float> & col) {
     if (client_n_ == 0)
         return false;
     srand((unsigned)time(NULL));
-    int j_client = rand() % client_n_;
+    j_client = rand() % client_n_;
     GetCol(j_client, j, col);
     return true;
 }

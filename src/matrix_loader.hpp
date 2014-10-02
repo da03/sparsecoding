@@ -14,8 +14,8 @@ class MatrixLoader {
         int GetM();
         int GetN();
         int GetClientN();
-        void GetCol(int j_client, int & j, std::vector<float> & col);
-        bool GetRandCol(int & j, std::vector<float> & col);
+        bool GetCol(int j_client, int & j, std::vector<float> & col);
+        bool GetRandCol(int & j_client, int & j, std::vector<float> & col);
     private:
         std::vector<std::vector<float> > data_;
         int m_, n_;
