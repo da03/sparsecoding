@@ -23,6 +23,7 @@ DEFINE_double(c, 1.0, "L2 norm constraint on elements of dictionary. "
 DEFINE_int32(num_iterations_per_thread, 100, 
         "Number of iterations per thread. "
         "Default value is 0.5.");
+DEFINE_int32(mini_batch, 1, "Mini batch for SGD. Default value is 1."); 
 DEFINE_double(init_step_size, 0.5, "SGD step size at iteration t is "
         "init_step_size * (step_size_offset + t)^(-step_size_pow). "
         "Default value is 0.5.");
@@ -89,9 +90,9 @@ int main(int argc, char * argv[]) {
     petuum::ClientTableConfig table_config;
     table_config.table_info.row_type = 0;
     table_config.table_info.table_staleness = FLAGS_table_staleness;
-    table_config.table_info.row_capacity = (FLAGS_dictionary_size == 0? sc_engine.getN(): FLAGS_dictionary_size);
+    table_config.table_info.row_capacity = (FLAGS_dictionary_size == 0? sc_engine.GetN(): FLAGS_dictionary_size);
     // all rows put into memory, to be modified
-    table_config.process_cache_capacity = sc_engine.getM();
+    table_config.process_cache_capacity = sc_engine.GetM();
     CHECK(petuum::PSTableGroup::CreateTable(0, table_config)) << "Failed to create dictionary table";
     // loss table. Single column. Each column is loss in one iteration
     table_config.table_info.row_type = 0;

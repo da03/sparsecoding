@@ -9,11 +9,14 @@ class SCEngine {
         SCEngine();
         ~SCEngine();
         void Start();
-        int getM();
-        int getN();
+        int GetM();
+        int GetN();
     private:
         std::atomic<int> thread_counter_;
-        int client_id_;
-        MatrixLoader matrix_loader_;
+        int client_id_, num_clients_;
+        int num_iterations_per_thread_, mini_batch_;
+        float init_step_size_, step_size_offset_, step_size_pow_;
+        std::string data_file_;
+        MatrixLoader X_matrix_loader_, S_matrix_loader_;
 };
 };
