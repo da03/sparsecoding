@@ -14,7 +14,7 @@ num_worker_threads=4
 num_iterations_per_thread=100
 
 # System parameters:
-staleness=0
+staleness=5
 table_staleness=$staleness
 
 # Figure out the paths.

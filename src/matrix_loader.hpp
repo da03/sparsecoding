@@ -3,6 +3,7 @@
 #include<atomic>
 #include<vector>
 #include<mutex>
+#define INFINITESIMAL 0.0001
 
 namespace sparsecoding {
 class MatrixLoader {
@@ -16,6 +17,7 @@ class MatrixLoader {
         int GetClientN();
         bool GetCol(int j_client, int & j, std::vector<float> & col);
         bool GetRandCol(int & j_client, int & j, std::vector<float> & col);
+        void IncCol(int j_client, std::vector<float> & inc);
     private:
         std::vector<std::vector<float> > data_;
         int m_, n_;

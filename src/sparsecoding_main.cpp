@@ -15,7 +15,7 @@ DEFINE_int32(client_id, 0, "Client ID");
 // Sparse Coding Parameters
 DEFINE_string(data_file, "", "Input matrix.");
 DEFINE_int32(dictionary_size, 0, "Size of dictionary. "
-        "Default value is number of rows in input matrix.");
+        "Default value is number of columns in input matrix.");
 DEFINE_double(lambda, 1.0, "L1 regularization strength. "
         "Default value is 1.0.");
 DEFINE_double(c, 1.0, "L2 norm constraint on elements of dictionary. "
