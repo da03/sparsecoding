@@ -1,20 +1,21 @@
 #!/usr/bin/env bash
-
+#make && sleep 3 && scp bin/* root@192.168.100.2:/root/public/apps/sparsecoding/bin && sleep 3 
 # Input files:
 data_filename="data/mat.data"
 host_filename="scripts/localserver"
 
 # Sparse Coding parameters:
 dictionary_size=0
-lambda=1
+lambda=1.0
 c=1.0
-
+init_step_size=0.5
+step_size_pow=0.5
 # Execution parameters:
 num_worker_threads=4
-num_iterations_per_thread=100
+num_iterations_per_thread=1000
 
 # System parameters:
-staleness=5
+staleness=0
 table_staleness=$staleness
 
 # Figure out the paths.
@@ -67,6 +68,8 @@ for ip in $unique_host_list; do
       --num_worker_threads $num_worker_threads \
       --dictionary_size $dictionary_size \
       --lambda $lambda \
+      --init_step_size $init_step_size \
+      --step_size_pow $step_size_pow \
       --c $c \
       --data_file=${data_file} \
       --table_staleness $table_staleness \

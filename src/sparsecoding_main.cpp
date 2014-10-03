@@ -53,7 +53,8 @@ int main(int argc, char * argv[]) {
     table_group_config.num_total_bg_threads = FLAGS_num_clients;
     table_group_config.num_total_clients = FLAGS_num_clients;
     // dictionary table and loss table
-    table_group_config.num_tables = 2;
+    table_group_config.num_tables = 3;                  // one more table for debugging
+    //table_group_config.num_tables = 2;
     table_group_config.num_local_server_threads = 1;
     table_group_config.num_local_bg_threads = 1;
     // + 1 for main()
@@ -90,9 +91,9 @@ int main(int argc, char * argv[]) {
     petuum::ClientTableConfig table_config;
     table_config.table_info.row_type = 0;
     table_config.table_info.table_staleness = FLAGS_table_staleness;
-    table_config.table_info.row_capacity = (FLAGS_dictionary_size == 0? sc_engine.GetN(): FLAGS_dictionary_size);
+    table_config.table_info.row_capacity = sc_engine.GetM();
     // all rows put into memory, to be modified
-    table_config.process_cache_capacity = sc_engine.GetM();
+    table_config.process_cache_capacity = (FLAGS_dictionary_size == 0? sc_engine.GetN(): FLAGS_dictionary_size);
     CHECK(petuum::PSTableGroup::CreateTable(0, table_config)) << "Failed to create dictionary table";
     // loss table. Single column. Each column is loss in one iteration
     table_config.table_info.row_type = 0;
@@ -100,6 +101,12 @@ int main(int argc, char * argv[]) {
     table_config.table_info.row_capacity = 3;
     table_config.process_cache_capacity = FLAGS_num_iterations_per_thread * FLAGS_num_clients;
     CHECK(petuum::PSTableGroup::CreateTable(1, table_config)) << "Failed to create loss table";
+    // S_table (temporary for debugging)
+    table_config.table_info.row_type = 0;
+    table_config.table_info.table_staleness = 0;
+    table_config.table_info.row_capacity = (FLAGS_dictionary_size == 0? sc_engine.GetN(): FLAGS_dictionary_size);
+    table_config.process_cache_capacity = sc_engine.GetN(); 
+    CHECK(petuum::PSTableGroup::CreateTable(2, table_config)) << "Failed to create dictionary table";
 
     petuum::PSTableGroup::CreateTableDone();
 
