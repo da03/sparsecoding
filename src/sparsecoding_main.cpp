@@ -98,7 +98,7 @@ int main(int argc, char * argv[]) {
     // loss table. Single column. Each column is loss in one iteration
     table_config.table_info.row_type = 0;
     table_config.table_info.table_staleness = 0;
-    table_config.table_info.row_capacity = 3;
+    table_config.table_info.row_capacity = 1;
     table_config.process_cache_capacity = FLAGS_num_iterations_per_thread * FLAGS_num_clients;
     CHECK(petuum::PSTableGroup::CreateTable(1, table_config)) << "Failed to create loss table";
     // S_table (temporary for debugging)

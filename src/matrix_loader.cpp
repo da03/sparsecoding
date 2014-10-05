@@ -7,6 +7,7 @@
 namespace sparsecoding {
 
 MatrixLoader::MatrixLoader() {
+    srand((unsigned)time(NULL));
 }
 
 void MatrixLoader::Load(std::string data_file, int client_id, int num_clients) {
@@ -61,7 +62,7 @@ void MatrixLoader::Load(int m, int n, int client_id, int num_clients, float low,
 }
 
 MatrixLoader::~MatrixLoader() {
-    if ( client_n_ > 0)
+    if (client_n_ > 0)
         delete [] mtx_;
 }
 
@@ -89,7 +90,6 @@ bool MatrixLoader::GetCol(int j_client, int & j, std::vector<float> & col) {
 bool MatrixLoader::GetRandCol(int & j_client, int & j, std::vector<float> & col) {
     if (client_n_ == 0)
         return false;
-    srand((unsigned)time(NULL));
     j_client = rand() % client_n_;
     GetCol(j_client, j, col);
     return true;
@@ -99,8 +99,12 @@ void MatrixLoader::IncCol(int j_client, std::vector<float> & inc) {
     std::unique_lock<std::mutex> lck (*(mtx_+j_client));
     for (int i = 0; i < m_; i++) {
         data_[j_client][i] += inc[i];
-        if (data_[j_client][i] > -INFINITESIMAL && data_[j_client][i] < INFINITESIMAL)
+        if ((data_[j_client][i] > -INFINITESIMAL) && (data_[j_client][i] < INFINITESIMAL))
             data_[j_client][i] = 0.0;
+        if (data_[j_client][i] > MAXELEVAL)
+            data_[j_client][i] = MAXELEVAL;
+        if (data_[j_client][i] < MINELEVAL)
+            data_[j_client][i] = MINELEVAL;
     }
 }
 }

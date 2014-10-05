@@ -1,18 +1,22 @@
 #!/usr/bin/env bash
-#make && sleep 3 && scp bin/* root@192.168.100.2:/root/public/apps/sparsecoding/bin && sleep 3 
+make && sleep 3 && scp bin/* root@192.168.100.2:/root/public/apps/sparsecoding/bin && scp data/* root@192.168.100.2:/root/public/apps/sparsecoding/data && sleep 3
+if [ $? -ne 0 ]; then
+    return 1;
+fi
 # Input files:
 data_filename="data/mat.data"
-host_filename="scripts/localserver"
+host_filename="scripts/twoservers"
 
 # Sparse Coding parameters:
-dictionary_size=0
+dictionary_size=20
 lambda=1.0
-c=1.0
+c=20.0
 init_step_size=0.5
+step_size_offset=100
 step_size_pow=0.5
 # Execution parameters:
 num_worker_threads=4
-num_iterations_per_thread=1000
+num_iterations_per_thread=10000
 
 # System parameters:
 staleness=0
@@ -69,6 +73,7 @@ for ip in $unique_host_list; do
       --dictionary_size $dictionary_size \
       --lambda $lambda \
       --init_step_size $init_step_size \
+      --step_size_offset $step_size_offset \
       --step_size_pow $step_size_pow \
       --c $c \
       --data_file=${data_file} \
@@ -87,3 +92,4 @@ for ip in $unique_host_list; do
   fi
   client_id=$(( client_id+1 ))
 done
+return 0;
