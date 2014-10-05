@@ -244,7 +244,7 @@ namespace sparsecoding {
             std::cout << "Starting output result: " << std::endl
                 << "Loss function evaluated on different clients:" << std::endl;
             for (int client = 0; client < num_clients_; client++) {
-                std::cout << std::setw(8) << "client" << client << '\t';
+                std::cout << std::setw(8) << "client" << client;
             }
             std::cout << std::endl;
             for (int iter = 0; iter < num_iterations_per_thread_; iter++) {
@@ -263,7 +263,7 @@ namespace sparsecoding {
                     const petuum::DenseRow<float> & petuum_row = row_acc.Get<petuum::DenseRow<float> >();
                     // Regularize by C_
                     temp2_cache = RegVec(petuum_row, m, C_, reg_cache[row_ind]);
-                    std::cout << std::setw(8) << std::setprecision(4) << temp2_cache[col_ind] << '\t';
+                    std::cout << std::setw(8) << std::fixed << std::setprecision(4) << temp2_cache[col_ind];
                 }
                 std::cout << std::endl;
             }
@@ -272,7 +272,7 @@ namespace sparsecoding {
                 for (int row_ind = 0; row_ind < GetN(); row_ind++) {
                     S_table.Get(row_ind, &row_acc);
                     const petuum::DenseRow<float> & petuum_row = row_acc.Get<petuum::DenseRow<float> >();
-                    std::cout << std::setw(8) << std::setprecision(4) << petuum_row[col_ind] << '\t';
+                    std::cout << std::setw(8) << std::fixed << std::setprecision(4) << petuum_row[col_ind];
                 }
                 std::cout << std::endl;
             }
