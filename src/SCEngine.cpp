@@ -196,7 +196,7 @@ namespace sparsecoding {
                             petuum::UpdateBatch<float> S_update;
                             S_table.Get(row_ind, &row_acc);
                             const petuum::DenseRow<float> & petuum_row = row_acc.Get<petuum::DenseRow<float> >();
-                                S_matrix_loader_.GetRandCol(col_ind_client, col_ind, S_cache);
+                            S_matrix_loader_.GetCol(col_ind_client, col_ind, S_cache);
                             for (int col_ind = 0; col_ind < dictionary_size_; col_ind++) {
                                 S_update.Update(col_ind, -1*petuum_row[col_ind] + S_cache[col_ind]);
                             }

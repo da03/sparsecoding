@@ -10,13 +10,13 @@ host_filename="scripts/twoservers"
 # Sparse Coding parameters:
 dictionary_size=20
 lambda=1.0
-c=20.0
+c=25.0
 init_step_size=0.5
 step_size_offset=100
 step_size_pow=0.5
 # Execution parameters:
 num_worker_threads=4
-num_iterations_per_thread=10000
+num_iterations_per_thread=5000
 
 # System parameters:
 staleness=0
@@ -39,15 +39,6 @@ ssh_options="-oStrictHostKeyChecking=no \
 host_list=`cat $host_file | awk '{ print $2 }'`
 unique_host_list=`cat $host_file | awk '{ print $2 }' | uniq`
 num_unique_hosts=`cat $host_file | awk '{ print $2 }' | uniq | wc -l`
-
-output_dir=$app_dir/output
-output_dir="${output_dir}/lda.S${staleness}"
-output_dir="${output_dir}.M${num_unique_hosts}"
-output_dir="${output_dir}.T${num_worker_threads}"
-rm -rf ${output_dir}
-mkdir -p ${output_dir}
-
-output_file_prefix=${output_dir}/sparsecoding_out  # Prefix for program output files.
 
 # Kill previous instances of this program
 echo "Killing previous instances of '$progname' on servers, please wait..."
