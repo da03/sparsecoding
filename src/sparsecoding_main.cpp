@@ -82,6 +82,7 @@ int main(int argc, char * argv[]) {
 
     // load data
     STATS_APP_LOAD_DATA_BEGIN();
+    std::cout << "Data loaded!" << std::flush;
     sparsecoding::SCEngine sc_engine;
     LOG(INFO) << "Data loaded!";
     STATS_APP_LOAD_DATA_END();

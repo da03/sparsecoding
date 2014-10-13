@@ -3,6 +3,8 @@
 #include <cstdio>
 #include <mutex>
 #include "matrix_loader.hpp"
+#include <iostream>
+#include <glog/logging.h>
 
 namespace sparsecoding {
 
