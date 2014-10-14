@@ -9,10 +9,10 @@
 #define INFINITESIMAL 0.0001
 // Elements cannot exceed MAXELEVAL to prevent overflow, 
 // also takes effect after performing function IncCol() on that column
-#define MAXELEVAL 1000.0
+#define MAXELEVAL 100000.0
 // Elements cannot be smaller than MAXELEVAL to prevent overflow, 
 // also takes effect after performing function IncCol() on that column
-#define MINELEVAL -1000.0
+#define MINELEVAL -100000.0
 
 namespace sparsecoding {
 class MatrixLoader {

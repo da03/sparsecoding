@@ -58,20 +58,25 @@ namespace sparsecoding {
 
     void SCEngine::Start() {
         int thread_id = thread_counter_++;
-        LOG_IF(INFO, thread_id == 0) << "thread starts!";
         petuum::PSTableGroup::RegisterThread();
         int m = X_matrix_loader_.GetM();
         int client_n = S_matrix_loader_.GetClientN();
         std::vector<float> X_cache(m), S_cache(dictionary_size_), reg_cache(dictionary_size_);
         std::vector<float> S_inc_cache(dictionary_size_), petuum_row_cache(m), temp_cache(m), temp2_cache(m);
         int col_ind, col_ind_client;
-        float table_cache[m][dictionary_size_] = {0.0};
+        float petuum_table_cache[dictionary_size_][m], petuum_update_cache[m][dictionary_size_];
 
         petuum::Table<float> B_table = petuum::PSTableGroup::GetTableOrDie<float>(0);
         petuum::Table<float> loss_table = petuum::PSTableGroup::GetTableOrDie<float>(1);
         petuum::Table<float> S_table = petuum::PSTableGroup::GetTableOrDie<float>(2);
         petuum::RowAccessor row_acc;
 
+        // initialize petuum table cache
+        for (int row_ind = 0; row_ind < dictionary_size_; row_ind++) {
+            for (int col_ind = 0; col_ind < m; col_ind++) {
+                petuum_table_cache[row_ind][col_ind] = 0.0;
+            }
+        }
         // initialize B
         STATS_APP_INIT_BEGIN();
         if (client_id_ == 0 && thread_id == 0) {
@@ -81,7 +86,7 @@ namespace sparsecoding {
                 petuum::UpdateBatch<float> B_update;
                 double sum = 0.0;
                 for (int col_ind = 0; col_ind < m; col_ind++) {
-                    temp2_cache[col_ind] = double(rand()) / RAND_MAX;
+                    temp2_cache[col_ind] = double(rand()) / RAND_MAX * 2.0 - 1.0;
                     sum += pow(temp2_cache[col_ind], 2);
                 }
                 for (int col_ind = 0; col_ind < m; col_ind++) {
@@ -92,7 +97,6 @@ namespace sparsecoding {
                 }
                 B_table.BatchInc(row_ind, B_update);
             }
-            LOG(INFO) << "table B initialization finished";
         }
 
         petuum::PSTableGroup::GlobalBarrier();
@@ -109,10 +113,15 @@ namespace sparsecoding {
                     const petuum::DenseRow<float> & petuum_row = row_acc.Get<petuum::DenseRow<float> >();
                     petuum_row.CopyToVector(&petuum_row_cache);
                     for (int col_ind = 0; col_ind < m; col_ind++) {
-                        petuum_table_cache[col_ind][row_ind] = petuum_row_cache[col_ind];
+                        petuum_table_cache[row_ind][col_ind] = petuum_row_cache[col_ind];
                     }
             }
-
+            // clear update table
+            for (int row_ind = 0; row_ind < dictionary_size_; row_ind++) {
+                for (int col_ind = 0; col_ind < m; col_ind++) {
+                    petuum_update_cache[row_ind][col_ind] = 0.0;
+                }
+            }
             int iter_per_thread_B = (client_n / num_worker_threads_ > 0)? client_n / num_worker_threads_: 1;
             // update B given S
             for (int iter_b = 0; iter_b == 0 || iter_b * mini_batch_ < iter_per_thread_B; iter_b++) {
@@ -124,10 +133,9 @@ namespace sparsecoding {
                         std::fill(temp_cache.begin(), temp_cache.end(), 0);
                         // B * S_j
                         for (int row_ind = 0; row_ind < dictionary_size_; row_ind++) {
-                            petuum_row
-                            B_table.Get(row_ind, &row_acc);
-                            const petuum::DenseRow<float> & petuum_row = row_acc.Get<petuum::DenseRow<float> >();
-                            petuum_row.CopyToVector(&petuum_row_cache);
+                            for (int col_ind = 0; col_ind < m; col_ind++) {
+                                petuum_row_cache[col_ind] = petuum_table_cache[row_ind][col_ind];
+                            }
                             // Regularize by C_
                             RegVec(petuum_row_cache, m, C_, reg_cache[row_ind], temp2_cache);
                             IncVec(temp_cache, temp2_cache, S_cache[row_ind]);
@@ -135,25 +143,46 @@ namespace sparsecoding {
                         // X_j - B * S_j
                         VecMinus(X_cache, temp_cache, temp2_cache);
 
-                        // Update B_table
+                        // Update cached B_table
                         for (int row_ind = 0; row_ind < dictionary_size_; row_ind++) {
-                            petuum::UpdateBatch<float> B_update;
-                            B_table.Get(row_ind, &row_acc);
-                            const petuum::DenseRow<float> & petuum_row = row_acc.Get<petuum::DenseRow<float> >();
-                            petuum_row.CopyToVector(&petuum_row_cache);
+                            for (int col_ind = 0; col_ind < m; col_ind++) {
+                                petuum_row_cache[col_ind] = petuum_table_cache[row_ind][col_ind];
+                            }
                             for (int col_ind = 0; col_ind < m; col_ind++) {
                                 temp_cache[col_ind] = petuum_row_cache[col_ind] / reg_cache[row_ind] + step_size * temp2_cache[col_ind] * S_cache[row_ind];
                             }
                             RegVec(temp_cache, m, C_, reg_cache[row_ind], temp2_cache);
                             for (int col_ind = 0; col_ind < m; col_ind++) {
-                                B_update.Update(col_ind, -1.0*petuum_row_cache[col_ind] + temp2_cache[col_ind]);
+                                petuum_update_cache[row_ind][col_ind] += -1.0*petuum_row_cache[col_ind] + temp2_cache[col_ind];
+                                petuum_table_cache[row_ind][col_ind] += -1.0*petuum_row_cache[col_ind] + temp2_cache[col_ind];
                             }
-                            B_table.BatchInc(row_ind, B_update);
                         }
                     }
                 }
             }
-            LOG(INFO) <<"starting update S";
+            // Update B_table
+            for (int row_ind = 0; row_ind < dictionary_size_; row_ind++) {
+                petuum::UpdateBatch<float> B_update;
+                for (int col_ind = 0; col_ind < m; col_ind++) {
+                    B_update.Update(col_ind, petuum_update_cache[row_ind][col_ind]);
+                }
+                B_table.BatchInc(row_ind, B_update);
+            }
+            petuum::PSTableGroup::Clock();
+            // Update B_table to normalize
+            for (int row_ind = 0; row_ind < dictionary_size_; row_ind++) {
+                B_table.Get(row_ind, &row_acc);
+                const petuum::DenseRow<float> & petuum_row = row_acc.Get<petuum::DenseRow<float> >();
+                petuum_row.CopyToVector(&petuum_row_cache);
+                RegVec(petuum_row_cache, m, C_, reg_cache[row_ind], temp_cache);
+                petuum::UpdateBatch<float> B_update;
+                for (int col_ind = 0; col_ind < m; col_ind++) {
+                    B_update.Update(col_ind, (-1.0*petuum_row_cache[col_ind] + temp_cache[col_ind])/num_clients_/num_worker_threads_);
+                }
+                B_table.BatchInc(row_ind, B_update);
+            }
+            petuum::PSTableGroup::Clock();
+                
             // update S given B
             int iter_per_thread_s = (client_n / num_worker_threads_ > 0)? client_n / num_worker_threads_: 1;
             for (int iter_s = 0; iter_s == 0 || iter_s * mini_batch_ < iter_per_thread_s; iter_s++) {
@@ -164,9 +193,8 @@ namespace sparsecoding {
                         std::fill(temp_cache.begin(), temp_cache.end(), 0);
                         // B * S_j
                         for (int row_ind = 0; row_ind < dictionary_size_; row_ind++) {
-                            B_table.Get(row_ind, &row_acc);
-                            const petuum::DenseRow<float> & petuum_row = row_acc.Get<petuum::DenseRow<float> >();
-                            petuum_row.CopyToVector(&petuum_row_cache);
+                            for (int col_ind = 0; col_ind < m; col_ind++)
+                                petuum_row_cache[col_ind] = petuum_table_cache[row_ind][col_ind];
                             // Regularize by C_
                             RegVec(petuum_row_cache, m, C_, reg_cache[row_ind], temp2_cache);
                             IncVec(temp_cache, temp2_cache, S_cache[row_ind]);
@@ -176,9 +204,8 @@ namespace sparsecoding {
                         // B^T * (X_j - B * S_j)
                         std::fill(S_inc_cache.begin(), S_inc_cache.end(), 0);
                         for (int row_ind = 0; row_ind < dictionary_size_; row_ind++) {
-                            B_table.Get(row_ind, &row_acc);
-                            const petuum::DenseRow<float> & petuum_row = row_acc.Get<petuum::DenseRow<float> >();
-                            petuum_row.CopyToVector(&petuum_row_cache);
+                            for (int col_ind = 0; col_ind < m; col_ind++)
+                                petuum_row_cache[col_ind] = petuum_table_cache[row_ind][col_ind];
                             // Regularize by C_
                             RegVec(petuum_row_cache, m, C_, reg_cache[row_ind], temp_cache);
                             for (int temp = 0; temp < m; temp++) {
@@ -190,7 +217,7 @@ namespace sparsecoding {
                         }
                         // update S_j
                         S_matrix_loader_.IncCol(col_ind_client, S_inc_cache);
-                        // temporary debugging S
+                        /*// temporary debugging S
                         for (int row_ind = col_ind; row_ind < col_ind+1; row_ind++) {
                             petuum::UpdateBatch<float> S_update;
                             S_table.Get(row_ind, &row_acc);
@@ -201,7 +228,7 @@ namespace sparsecoding {
                                 S_update.Update(col_ind, -1*petuum_row_cache[col_ind] + S_cache[col_ind]);
                             }
                             S_table.BatchInc(row_ind, S_update);
-                        }
+                        }*/
                     }
 
                 }
@@ -216,9 +243,9 @@ namespace sparsecoding {
                         std::fill(temp_cache.begin(), temp_cache.end(), 0);
                         // B * S_j
                         for (int row_ind = 0; row_ind < dictionary_size_; row_ind++) {
-                            B_table.Get(row_ind, &row_acc);
-                            const petuum::DenseRow<float> & petuum_row = row_acc.Get<petuum::DenseRow<float> >();
-                            petuum_row.CopyToVector(&petuum_row_cache);
+                            for (int col_ind = 0; col_ind < m; col_ind++)
+                                petuum_row_cache[col_ind] = petuum_table_cache[row_ind][col_ind];
+
                             // Regularize by C_
                             RegVec(petuum_row_cache, m, C_, reg_cache[row_ind], temp2_cache);
                             IncVec(temp_cache, temp2_cache, S_cache[row_ind]);
@@ -234,17 +261,17 @@ namespace sparsecoding {
                     }
                 }
                 if (client_id_ == 0)
-                    LOG(INFO) << "objective: " << obj;
+                    LOG(INFO) << "-----------------------iter: " << iter << " 1 out of " << num_clients_ <<" objective: " << obj;
                 // update loss table
                 loss_table.Inc(client_id_ * num_iterations_per_thread_ + iter,  0, obj);
                 // clock++
             }
-            petuum::PSTableGroup::Clock();
+            //petuum::PSTableGroup::Clock();
         }
         // output result, temporary version
         petuum::PSTableGroup::GlobalBarrier();
         if (client_id_ == 0 && thread_id == 0) {
-            std::cout << "Starting output result: " << std::endl
+            /*std::cout << "Starting output result: " << std::endl
                 << "Loss function evaluated on different clients:" << std::endl;
             for (int client = 0; client < num_clients_; client++) {
                 std::cout << std::setw(8) << "client" << client;
@@ -259,7 +286,7 @@ namespace sparsecoding {
                     std::cout << std::setw(8) << std::setprecision(4) << petuum_row_cache[0] << '\t';
                 }
                 std::cout << std::endl;
-            }
+            }*/
             std::cout << "B:" << std::endl;
             /*for (int col_ind = 0; col_ind < m; col_ind++) {
                 for (int row_ind = 0; row_ind < dictionary_size_; row_ind++) {
@@ -282,7 +309,6 @@ namespace sparsecoding {
             }*/
         }
         petuum::PSTableGroup::DeregisterThread();
-        LOG_IF(INFO, thread_id == 0) << "thread 0 on client" << client_id_ << " ends!";
     }
     int SCEngine::GetM() {
         return X_matrix_loader_.GetM();

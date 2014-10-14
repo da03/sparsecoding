@@ -1,22 +1,18 @@
 #!/usr/bin/env bash
-#make && sleep 3 && scp bin/* root@192.168.100.3:/root/public/apps/sparsecoding/bin && scp data/* root@192.168.100.3:/root/public/apps/sparsecoding/data && sleep 3
-if [ $? -ne 0 ]; then
-    return 1;
-fi
 # Input files:
 data_filename="data/data.mat"
-host_filename="scripts/localserver"
+host_filename="scripts/threeservers"
 
 # Sparse Coding parameters:
 dictionary_size=0
 lambda=1.0
-c=9000000.0
+c=1.0
 init_step_size=0.5
-step_size_offset=100
+step_size_offset=50
 step_size_pow=0.5
 # Execution parameters:
-num_worker_threads=1
-num_iterations_per_thread=100
+num_worker_threads=4
+num_iterations_per_thread=200
 
 # System parameters:
 staleness=0
@@ -48,6 +44,11 @@ for ip in $unique_host_list; do
 done
 echo "All done!"
 
+scp bin/* root@192.168.100.3:/root/public/apps/sparsecoding/bin && scp data/* root@192.168.100.3:/root/public/apps/sparsecoding/data && scp scripts/* root@192.168.100.3:/root/public/apps/sparsecoding/scripts && sleep 3
+scp bin/* root@192.168.100.2:/root/public/apps/sparsecoding/bin && scp data/* root@192.168.100.2:/root/public/apps/sparsecoding/data && scp scripts/* root@192.168.100.2:/root/public/apps/sparsecoding/scripts && sleep 3
+if [ $? -ne 0 ]; then
+    return 1;
+fi
 # Spawn program instances
 client_id=0
 for ip in $unique_host_list; do
