@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Input files:
 data_filename="data/data.mat"
-host_filename="scripts/threeservers"
+host_filename="scripts/twoservers"
 
 # Sparse Coding parameters:
 dictionary_size=0

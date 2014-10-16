@@ -53,7 +53,7 @@ int main(int argc, char * argv[]) {
     table_group_config.num_total_bg_threads = FLAGS_num_clients;
     table_group_config.num_total_clients = FLAGS_num_clients;
     // dictionary table and loss table
-    table_group_config.num_tables = 3;                  // one more table for debugging
+    table_group_config.num_tables = 2;                  // one more table for debugging
     //table_group_config.num_tables = 2;
     table_group_config.num_local_server_threads = 1;
     table_group_config.num_local_bg_threads = 1;
@@ -82,7 +82,6 @@ int main(int argc, char * argv[]) {
 
     // load data
     STATS_APP_LOAD_DATA_BEGIN();
-    std::cout << "Data loaded!" << std::flush;
     sparsecoding::SCEngine sc_engine;
     LOG(INFO) << "Data loaded!";
     STATS_APP_LOAD_DATA_END();
@@ -103,11 +102,11 @@ int main(int argc, char * argv[]) {
     table_config.process_cache_capacity = FLAGS_num_iterations_per_thread * FLAGS_num_clients;
     CHECK(petuum::PSTableGroup::CreateTable(1, table_config)) << "Failed to create loss table";
     // S_table (temporary for debugging)
-    table_config.table_info.row_type = 0;
-    table_config.table_info.table_staleness = 0;
-    table_config.table_info.row_capacity = (FLAGS_dictionary_size == 0? sc_engine.GetN(): FLAGS_dictionary_size);
-    table_config.process_cache_capacity = sc_engine.GetN(); 
-    CHECK(petuum::PSTableGroup::CreateTable(2, table_config)) << "Failed to create dictionary table";
+    //table_config.table_info.row_type = 0;
+    //table_config.table_info.table_staleness = 0;
+    //table_config.table_info.row_capacity = (FLAGS_dictionary_size == 0? sc_engine.GetN(): FLAGS_dictionary_size);
+    //table_config.process_cache_capacity = sc_engine.GetN(); 
+    //CHECK(petuum::PSTableGroup::CreateTable(2, table_config)) << "Failed to create dictionary table";
 
     petuum::PSTableGroup::CreateTableDone();
 
