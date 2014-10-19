@@ -6,7 +6,8 @@
 #include <algorithm>
 #include <fstream>
 #include <boost/date_time/posix_time/posix_time.hpp>
-#include <math.h>
+#include <cmath>
+#include <omp.h>
 
 namespace sparsecoding {
 
@@ -32,8 +33,8 @@ namespace sparsecoding {
         S_matrix_loader_.Load(dictionary_size_, X_matrix_loader_.GetN(), client_id_, num_clients_, -1.0, 1.0);
 
 	int max_client_n = ceil(float(X_matrix_loader_.GetN()) / num_clients_);
-	int iter_minibatch = 2 * (max_client_n / num_worker_threads_ / mini_batch_ + 1);
-	num_eval_per_client_ = num_iterations_per_thread_ * iter_minibatch / num_eval_minibatch_ + 1;
+	int iter_minibatch = max_client_n / num_worker_threads_ / mini_batch_ + 1;
+	num_eval_per_client_ = (num_iterations_per_thread_ * iter_minibatch - 1) / num_eval_minibatch_ + 1;
     }
 
     inline void RegVec(std::vector<float> & inc, int len, float C, float & reg, std::vector<float> & vec_result) {
@@ -120,7 +121,7 @@ namespace sparsecoding {
         STATS_APP_INIT_END();
 
         // start iterations
-        int t_b = 0, t_s = 0; // decide step_size for updating B or S
+        int t_b = 0; // decide step_size for updating B 
 	int num_minibatch = 0;
         boost::posix_time::ptime beginT = boost::posix_time::microsec_clock::local_time();
         float step_size = init_step_size_;
@@ -128,8 +129,6 @@ namespace sparsecoding {
 	    if (thread_id == 0)
                 LOG(INFO) << "client: " << client_id_ << "iteration: "<< iter;
             int iter_per_thread_B = (client_n / num_worker_threads_ > 0)? client_n / num_worker_threads_: 1;
-            // update B given S
-	    LOG(INFO)<<"updating B given S";
             for (int iter_b = 0; iter_b * mini_batch_ < iter_per_thread_B; iter_b++) {
                 // update petuum table cache
                 for (int row_ind = 0; row_ind < dictionary_size_; row_ind++) {
@@ -147,7 +146,8 @@ namespace sparsecoding {
             	    // evaluate partial obj
                     if (true || thread_id == 0) {
                         double obj = 0.0;
-		        int num_samples = (client_n > 1000)? 1000: client_n;
+		        int num_samples = (client_n > 250)? 250: client_n;
+			#pragma omp parallel for firstprivate(col_ind_client,col_ind,S_cache,X_cache,temp_cache, petuum_row_cache, temp2_cache)
                         for (int i = 0; i < num_samples; i++) {
                             if (S_matrix_loader_.GetRandCol(col_ind_client, col_ind, S_cache) && X_matrix_loader_.GetCol(col_ind_client, col_ind, X_cache)) {
                                 std::fill(temp_cache.begin(), temp_cache.end(), 0);
@@ -190,8 +190,42 @@ namespace sparsecoding {
                     }
             	}
                 // mini batch
+		LOG(INFO)<<"starting minibatch";
+		#pragma omp parallel for firstprivate(col_ind_client,col_ind,S_cache,X_cache,temp_cache, petuum_row_cache, temp2_cache, S_inc_cache, reg_cache)
                 for (int k = 0; k < mini_batch_; k++) {
                     if (S_matrix_loader_.GetRandCol(col_ind_client, col_ind, S_cache) && X_matrix_loader_.GetCol(col_ind_client, col_ind, X_cache)) {
+                        // update S
+                        std::fill(temp_cache.begin(), temp_cache.end(), 0);
+                        // B * S_j
+                        for (int row_ind = 0; row_ind < dictionary_size_; row_ind++) {
+                            for (int col_ind = 0; col_ind < m; col_ind++)
+                                petuum_row_cache[col_ind] = petuum_table_cache[row_ind][col_ind];
+                            // Regularize by C_
+                            RegVec(petuum_row_cache, m, C_, reg_cache[row_ind], temp2_cache);
+                            IncVec(temp_cache, temp2_cache, S_cache[row_ind]);
+                        }
+                        // X_j - B * S_j
+                        VecMinus(X_cache, temp_cache, temp2_cache);
+                        // B^T * (X_j - B * S_j)
+                        std::fill(S_inc_cache.begin(), S_inc_cache.end(), 0);
+                        for (int row_ind = 0; row_ind < dictionary_size_; row_ind++) {
+                            for (int col_ind = 0; col_ind < m; col_ind++)
+                                petuum_row_cache[col_ind] = petuum_table_cache[row_ind][col_ind];
+                            // Regularize by C_
+                            RegVec(petuum_row_cache, m, C_, reg_cache[row_ind], temp_cache);
+                            for (int temp = 0; temp < m; temp++) {
+                               S_inc_cache[row_ind] += temp2_cache[temp] * temp_cache[temp];
+                            }
+                            S_inc_cache[row_ind] -= lambda_ * ((S_cache[row_ind] > INFINITESIMAL)? 1.0: 0.0);
+                            S_inc_cache[row_ind] -= lambda_ * ((S_cache[row_ind] < -INFINITESIMAL)? -1.0: 0.0);
+                            S_inc_cache[row_ind] *= step_size;
+                        }
+                        // update S_j
+                        S_matrix_loader_.IncCol(col_ind_client, S_inc_cache);
+
+			// get updated S_j
+			S_matrix_loader_.GetCol(col_ind_client, col_ind, S_cache);
+
                         std::fill(temp_cache.begin(), temp_cache.end(), 0);
                         // B * S_j
                         for (int row_ind = 0; row_ind < dictionary_size_; row_ind++) {
@@ -239,98 +273,6 @@ namespace sparsecoding {
 		//LOG(INFO)<<"update B table ends";
                 petuum::PSTableGroup::Clock(); 
             }
-	    LOG(INFO)<<"updating S";
-            // update S given B
-            // update petuum table cache
-            for (int row_ind = 0; row_ind < dictionary_size_; row_ind++) {
-                B_table.Get(row_ind, &row_acc);
-                const petuum::DenseRow<float> & petuum_row = row_acc.Get<petuum::DenseRow<float> >();
-                petuum_row.CopyToVector(&petuum_row_cache);
-                for (int col_ind = 0; col_ind < m; col_ind++) {
-                    petuum_table_cache[row_ind][col_ind] = petuum_row_cache[col_ind];
-                }
-            }
-            int iter_per_thread_s = (client_n / num_worker_threads_ > 0)? client_n / num_worker_threads_: 1;
-            for (int iter_s = 0; iter_s * mini_batch_ < iter_per_thread_s; iter_s++) {
-		// evaluate obj
-		if (num_minibatch % num_eval_minibatch_ == 0) {
-	    	    boost::posix_time::time_duration elapTime = boost::posix_time::microsec_clock::local_time() - beginT;
-                    LOG(INFO) <<"evaluating obj";
-            	    // evaluate partial obj
-                    if (true || thread_id == 0) {
-                        double obj = 0.0;
-		        int num_samples = (client_n > 1000)? 1000: client_n;
-                        for (int i = 0; i < num_samples; i++) {
-                            if (S_matrix_loader_.GetRandCol(col_ind_client, col_ind, S_cache) && X_matrix_loader_.GetCol(col_ind_client, col_ind, X_cache)) {
-                                std::fill(temp_cache.begin(), temp_cache.end(), 0);
-                                // B * S_j
-                                for (int row_ind = 0; row_ind < dictionary_size_; row_ind++) {
-                                    for (int col_ind = 0; col_ind < m; col_ind++)
-                                        petuum_row_cache[col_ind] = petuum_table_cache[row_ind][col_ind];
-
-                                        // Regularize by C_
-                            	        RegVec(petuum_row_cache, m, C_, reg_cache[row_ind], temp2_cache);
-                                        IncVec(temp_cache, temp2_cache, S_cache[row_ind]);
-                                }
-                                // X_j - B * S_j
-                                VecMinus(X_cache, temp_cache, temp2_cache);
-                                for (int temp = 0; temp < m; temp++) {
-                                    obj += temp2_cache[temp] * temp2_cache[temp];
-                                }
-                                for (int temp = 0; temp < dictionary_size_; temp++) {
-                                    obj += lambda_ * std::abs(S_cache[temp]);
-                                }
-                            }
-                        }
-		        //obj = obj * client_n / num_samples;
-		        obj = obj / num_samples;
-                        LOG(INFO) << "-----------------------iter: " << iter << ", client " << client_id_ << "/" << num_clients_ <<" average objective: " << obj;
-                        // update loss table
-                        loss_table.Inc(client_id_ * num_eval_per_client_ + num_minibatch/num_eval_minibatch_,  0, obj/num_worker_threads_);
-		        loss_table.Inc((num_clients_+client_id_) * num_eval_per_client_ + num_minibatch/num_eval_minibatch_, 0, ((float) elapTime.total_milliseconds()) / 1000 / num_worker_threads_);
-        	    	beginT = boost::posix_time::microsec_clock::local_time();
-                        LOG(INFO) <<"finished evaluating obj";
-                    }
-		}
-		t_s = t_b;
-                step_size = init_step_size_ * pow(step_size_offset_ + t_s, -1*step_size_pow_);
-		num_minibatch++;
-                for (int k = 0; k < mini_batch_; k++) {
-                    if (S_matrix_loader_.GetRandCol(col_ind_client, col_ind, S_cache) && X_matrix_loader_.GetCol(col_ind_client, col_ind, X_cache)) {
-                        std::fill(temp_cache.begin(), temp_cache.end(), 0);
-                        // B * S_j
-                        for (int row_ind = 0; row_ind < dictionary_size_; row_ind++) {
-                            for (int col_ind = 0; col_ind < m; col_ind++)
-                                petuum_row_cache[col_ind] = petuum_table_cache[row_ind][col_ind];
-                            // Regularize by C_
-                            RegVec(petuum_row_cache, m, C_, reg_cache[row_ind], temp2_cache);
-                            IncVec(temp_cache, temp2_cache, S_cache[row_ind]);
-                        }
-                        // X_j - B * S_j
-                        VecMinus(X_cache, temp_cache, temp2_cache);
-                        // B^T * (X_j - B * S_j)
-                        std::fill(S_inc_cache.begin(), S_inc_cache.end(), 0);
-                        for (int row_ind = 0; row_ind < dictionary_size_; row_ind++) {
-                            for (int col_ind = 0; col_ind < m; col_ind++)
-                                petuum_row_cache[col_ind] = petuum_table_cache[row_ind][col_ind];
-                            // Regularize by C_
-                            RegVec(petuum_row_cache, m, C_, reg_cache[row_ind], temp_cache);
-                            for (int temp = 0; temp < m; temp++) {
-                               S_inc_cache[row_ind] += temp2_cache[temp] * temp_cache[temp];
-                            }
-                            S_inc_cache[row_ind] -= lambda_ * ((S_cache[row_ind] > INFINITESIMAL)? 1.0: 0.0);
-                            S_inc_cache[row_ind] -= lambda_ * ((S_cache[row_ind] < -INFINITESIMAL)? -1.0: 0.0);
-                            S_inc_cache[row_ind] *= step_size;
-                        }
-                        // update S_j
-                        S_matrix_loader_.IncCol(col_ind_client, S_inc_cache);
-                    }
-
-                }
-            }
-
-	    LOG(INFO)<<"update S table ends";
-                
         }
         // output result
         petuum::PSTableGroup::GlobalBarrier();

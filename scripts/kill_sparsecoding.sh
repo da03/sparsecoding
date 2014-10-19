@@ -1,7 +1,24 @@
 #!/usr/bin/env bash
 # Input files:
 data_filename="data/data.mat"
-host_filename="scripts/threeservers"
+host_filename="scripts/cogthree"
+
+# Sparse Coding parameters:
+dictionary_size=0
+lambda=1.0
+c=1.0
+init_step_size=0.00005
+step_size_offset=50
+step_size_pow=0.0
+mini_batch=10
+num_eval_minibatch=100
+# Execution parameters:
+num_worker_threads=4
+num_iterations_per_thread=300
+
+# System parameters:
+staleness=0
+table_staleness=$staleness
 
 # Figure out the paths.
 script_path=`readlink -f $0`
@@ -12,6 +29,9 @@ prog_path=$app_dir/bin/${progname}
 data_file=$(readlink -f $data_filename)
 host_file=$(readlink -f $host_filename)
 
+ssh_options="-oStrictHostKeyChecking=no \
+-oUserKnownHostsFile=/dev/null \
+-oLogLevel=quiet"
 
 # Parse hostfile
 host_list=`cat $host_file | awk '{ print $2 }'`
@@ -26,4 +46,3 @@ for ip in $unique_host_list; do
 done
 echo "All done!"
 
-return 0;

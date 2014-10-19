@@ -10,11 +10,11 @@ c=1.0
 init_step_size=0.00005
 step_size_offset=50
 step_size_pow=0.0
-mini_batch=10
-num_eval_minibatch=100
+mini_batch=100
+num_eval_minibatch=10
 # Execution parameters:
 num_worker_threads=4
-num_iterations_per_thread=100
+num_iterations_per_thread=300
 
 # System parameters:
 staleness=0
@@ -51,7 +51,8 @@ client_id=0
 for ip in $unique_host_list; do
   echo Running client $client_id on $ip
 
-  cmd="GLOG_logtostderr=true \
+  #cmd="GLOG_logtostderr=true \
+  cmd="GLOG_logtostderr=false \
       GLOG_v=-1 \
       GLOG_minloglevel=0 \
       GLOG_vmodule="" \

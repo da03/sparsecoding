@@ -46,6 +46,7 @@ DEFINE_string(consistency_model, "SSPPush", "SSP or SSPPush or ...");
 int main(int argc, char * argv[]) {
     google::ParseCommandLineFlags(&argc, &argv, true);
     google::InitGoogleLogging(argv[0]);
+    google::SetLogDestination(google::INFO, "/home/yuntiand/public/apps/sparsecoding/log/INFO.txt");
 
     petuum::TableGroupConfig table_group_config;
     // 1 server thread per client
@@ -98,8 +99,8 @@ int main(int argc, char * argv[]) {
     CHECK(petuum::PSTableGroup::CreateTable(0, table_config)) << "Failed to create dictionary table";
     // loss table. Single column. Each column is loss in one iteration
     int max_client_n = ceil(float(sc_engine.GetN()) / FLAGS_num_clients);
-    int iter_minibatch = 2 * (max_client_n / FLAGS_num_worker_threads / FLAGS_mini_batch + 1);
-    int num_eval_per_client = FLAGS_num_iterations_per_thread * iter_minibatch / FLAGS_num_eval_minibatch + 1;
+    int iter_minibatch = (max_client_n / FLAGS_num_worker_threads / FLAGS_mini_batch + 1);
+    int num_eval_per_client = (FLAGS_num_iterations_per_thread * iter_minibatch - 1) / FLAGS_num_eval_minibatch + 1;
     table_config.table_info.row_type = 0;
     table_config.table_info.table_staleness = 0;
     table_config.table_info.row_capacity = 1;
