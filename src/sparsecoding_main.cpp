@@ -24,6 +24,7 @@ DEFINE_int32(num_iterations_per_thread, 100,
         "Number of iterations per thread. "
         "Default value is 0.5.");
 DEFINE_int32(mini_batch, 1, "Mini batch for SGD. Default value is 1."); 
+DEFINE_int32(num_eval_minibatch, 10, "Evaluate obj per how many minibatches. Default value is 10."); 
 DEFINE_double(init_step_size, 0.5, "SGD step size at iteration t is "
         "init_step_size * (step_size_offset + t)^(-step_size_pow). "
         "Default value is 0.5.");
@@ -96,10 +97,13 @@ int main(int argc, char * argv[]) {
     table_config.process_cache_capacity = (FLAGS_dictionary_size == 0? sc_engine.GetN(): FLAGS_dictionary_size);
     CHECK(petuum::PSTableGroup::CreateTable(0, table_config)) << "Failed to create dictionary table";
     // loss table. Single column. Each column is loss in one iteration
+    int max_client_n = ceil(float(sc_engine.GetN()) / FLAGS_num_clients);
+    int iter_minibatch = 2 * (max_client_n / FLAGS_num_worker_threads / FLAGS_mini_batch + 1);
+    int num_eval_per_client = FLAGS_num_iterations_per_thread * iter_minibatch / FLAGS_num_eval_minibatch + 1;
     table_config.table_info.row_type = 0;
     table_config.table_info.table_staleness = 0;
     table_config.table_info.row_capacity = 1;
-    table_config.process_cache_capacity = FLAGS_num_iterations_per_thread * FLAGS_num_clients * 2;
+    table_config.process_cache_capacity = num_eval_per_client * FLAGS_num_clients * 2;
     CHECK(petuum::PSTableGroup::CreateTable(1, table_config)) << "Failed to create loss table";
     // S_table (temporary for debugging)
     //table_config.table_info.row_type = 0;
