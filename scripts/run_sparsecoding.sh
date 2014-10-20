@@ -4,13 +4,13 @@ data_filename="data/data.mat"
 host_filename="scripts/cogthree"
 
 # Sparse Coding parameters:
-dictionary_size=0
+dictionary_size=20000
 lambda=1.0
 c=1.0
-init_step_size=0.00005
+init_step_size=0.01
 step_size_offset=50
 step_size_pow=0.0
-mini_batch=100
+mini_batch=1000
 num_eval_minibatch=10
 # Execution parameters:
 num_worker_threads=4

@@ -7,8 +7,7 @@
 #include <fstream>
 #include <boost/date_time/posix_time/posix_time.hpp>
 #include <cmath>
-#include <omp.h>
-
+#include <mutex>
 namespace sparsecoding {
 
     SCEngine::SCEngine() {
@@ -82,6 +81,10 @@ namespace sparsecoding {
         //petuum::Table<float> S_table = petuum::PSTableGroup::GetTableOrDie<float>(2);
         petuum::RowAccessor row_acc;
 
+	// mutex
+	std::mutex * mtx;
+	mtx = new std::mutex[dictionary_size_];
+
         // allocate space for cache table
         petuum_table_cache = new float *[dictionary_size_];
         petuum_update_cache = new float *[dictionary_size_];
@@ -131,6 +134,7 @@ namespace sparsecoding {
             int iter_per_thread_B = (client_n / num_worker_threads_ > 0)? client_n / num_worker_threads_: 1;
             for (int iter_b = 0; iter_b * mini_batch_ < iter_per_thread_B; iter_b++) {
                 // update petuum table cache
+		LOG(INFO) << "starting update table cache";
                 for (int row_ind = 0; row_ind < dictionary_size_; row_ind++) {
                     B_table.Get(row_ind, &row_acc);
                     const petuum::DenseRow<float> & petuum_row = row_acc.Get<petuum::DenseRow<float> >();
@@ -139,6 +143,7 @@ namespace sparsecoding {
                         petuum_table_cache[row_ind][col_ind] = petuum_row_cache[col_ind];
                     }
                 }
+		LOG(INFO) << "finished starting update table cache";
 		// evaluate obj
 		if (num_minibatch % num_eval_minibatch_ == 0) {
 	    	    boost::posix_time::time_duration elapTime = boost::posix_time::microsec_clock::local_time() - beginT;
@@ -146,8 +151,8 @@ namespace sparsecoding {
             	    // evaluate partial obj
                     if (true || thread_id == 0) {
                         double obj = 0.0;
-		        int num_samples = (client_n > 250)? 250: client_n;
-			#pragma omp parallel for firstprivate(col_ind_client,col_ind,S_cache,X_cache,temp_cache, petuum_row_cache, temp2_cache)
+		        int num_samples = (client_n > 2500)? 2500: client_n;
+			#pragma omp parallel for firstprivate(col_ind_client,col_ind,S_cache,X_cache,temp_cache, petuum_row_cache, temp2_cache) reduction(+:obj)
                         for (int i = 0; i < num_samples; i++) {
                             if (S_matrix_loader_.GetRandCol(col_ind_client, col_ind, S_cache) && X_matrix_loader_.GetCol(col_ind_client, col_ind, X_cache)) {
                                 std::fill(temp_cache.begin(), temp_cache.end(), 0);
@@ -190,7 +195,7 @@ namespace sparsecoding {
                     }
             	}
                 // mini batch
-		LOG(INFO)<<"starting minibatch";
+		LOG(INFO)<<"starting minibatch" << num_minibatch << ", client "<<client_id_<<", thread "<<thread_id;
 		#pragma omp parallel for firstprivate(col_ind_client,col_ind,S_cache,X_cache,temp_cache, petuum_row_cache, temp2_cache, S_inc_cache, reg_cache)
                 for (int k = 0; k < mini_batch_; k++) {
                     if (S_matrix_loader_.GetRandCol(col_ind_client, col_ind, S_cache) && X_matrix_loader_.GetCol(col_ind_client, col_ind, X_cache)) {
@@ -239,16 +244,21 @@ namespace sparsecoding {
                         // X_j - B * S_j
                         VecMinus(X_cache, temp_cache, temp2_cache);
                         // Update cached B_table
-                        for (int row_ind = 0; row_ind < dictionary_size_; row_ind++) {
-                            for (int col_ind = 0; col_ind < m; col_ind++) {
-				//petuum_update_cache[row_ind][col_ind] += step_size * temp2_cache[col_ind] * S_cache[row_ind] * reg_cache[row_ind];
-				petuum_update_cache[row_ind][col_ind] += step_size * temp2_cache[col_ind] * S_cache[row_ind];
+                        //#pragma omp critical
+			{
+                            for (int row_ind = 0; row_ind < dictionary_size_; row_ind++) {
+				mtx[row_ind].lock();
+                                for (int col_ind = 0; col_ind < m; col_ind++) {
+				    //petuum_update_cache[row_ind][col_ind] += step_size * temp2_cache[col_ind] * S_cache[row_ind] * reg_cache[row_ind];
+				    petuum_update_cache[row_ind][col_ind] += step_size * temp2_cache[col_ind] * S_cache[row_ind];
+                                }
+				mtx[row_ind].unlock();
                             }
-                        }
+			}
                     }
                 }
 		// calculate updates
-		//LOG(INFO)<<"start update B table";
+		LOG(INFO)<<"start update B table";
                 // Update B_table
                 for (int row_ind = 0; row_ind < dictionary_size_; row_ind++) {
                     petuum::UpdateBatch<float> B_update;
@@ -270,7 +280,7 @@ namespace sparsecoding {
                     }
                     B_table.BatchInc(row_ind, B_update);
                 }
-		//LOG(INFO)<<"update B table ends";
+		LOG(INFO)<<"update B table ends";
                 petuum::PSTableGroup::Clock(); 
             }
         }
@@ -349,6 +359,7 @@ namespace sparsecoding {
         }
         delete [] petuum_table_cache;
         delete [] petuum_update_cache;
+	delete [] mtx;
         petuum::PSTableGroup::DeregisterThread();
     }
     int SCEngine::GetM() {
