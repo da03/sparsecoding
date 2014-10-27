@@ -6,7 +6,7 @@
 using namespace std;
 int main(void)
 {
-    int m = 10000, n = 1000000;
+    int m = 1000, n = 1000;
     FILE *fp = fopen("data.mat", "w");
     srand((unsigned int)time(0));
     if (fp != NULL) {
