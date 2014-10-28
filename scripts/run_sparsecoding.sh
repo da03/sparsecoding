@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Input files:
-data_filename="data/data.mat.1k.1k"
-host_filename="scripts/cogfour"
+data_filename="data/mat.data"
+host_filename="../../machinefiles/servers"
 
 # Sparse Coding parameters:
 dictionary_size=0
@@ -10,7 +10,7 @@ c=1.0
 init_step_size=0.01
 step_size_offset=50
 step_size_pow=0.0
-mini_batch=100
+mini_batch=1
 num_eval_minibatch=10
 # Execution parameters:
 num_worker_threads=4
@@ -52,7 +52,7 @@ for ip in $unique_host_list; do
   echo Running client $client_id on $ip
 
   #cmd="GLOG_logtostderr=true \
-  cmd="GLOG_logtostderr=false \
+  cmd="GLOG_logtostderr=true \
       GLOG_v=-1 \
       GLOG_minloglevel=0 \
       GLOG_vmodule="" \

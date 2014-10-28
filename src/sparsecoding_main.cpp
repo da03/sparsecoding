@@ -11,6 +11,8 @@ DEFINE_string(hostfile, "", "Path to file containing server ip:port.");
 DEFINE_int32(num_clients, 1, "Total number of clients");
 DEFINE_int32(num_worker_threads, 4, "Number of app threads in this client");
 DEFINE_int32(client_id, 0, "Client ID");
+DEFINE_int32(num_comm_channels_per_client, 2,
+    "number of comm channels per client");
  
 // Sparse Coding Parameters
 DEFINE_string(data_file, "", "Input matrix.");
@@ -42,29 +44,25 @@ DEFINE_int32(table_staleness, 0, "Staleness for dictionary table."
 // No need to change the following
 DEFINE_string(stats_path, "", "Statistics output file.");
 DEFINE_string(consistency_model, "SSPPush", "SSP or SSPPush or ...");
+DEFINE_int32(row_oplog_type, petuum::RowOpLogType::kDenseRowOpLog, "row oplog type");
+DEFINE_bool(oplog_dense_serialized, true, "dense serialized oplog");
 
 int main(int argc, char * argv[]) {
     google::ParseCommandLineFlags(&argc, &argv, true);
     google::InitGoogleLogging(argv[0]);
-    google::SetLogDestination(google::INFO, "/home/yuntiand/public/apps/sparsecoding/log/INFO.txt");
+    //google::SetLogDestination(google::INFO, "/home/yuntiand/internal/apps/sparsecoding/log/INFO.txt");
 
     petuum::TableGroupConfig table_group_config;
-    // 1 server thread per client
-    table_group_config.num_total_server_threads = FLAGS_num_clients;
-    // 1 background thread per client
-    table_group_config.num_total_bg_threads = FLAGS_num_clients;
+    table_group_config.num_comm_channels_per_client
+      = FLAGS_num_comm_channels_per_client;
     table_group_config.num_total_clients = FLAGS_num_clients;
     // dictionary table and loss table
     table_group_config.num_tables = 2;                  // one more table for debugging
-    //table_group_config.num_tables = 2;
-    table_group_config.num_local_server_threads = 1;
-    table_group_config.num_local_bg_threads = 1;
     // + 1 for main()
     table_group_config.num_local_app_threads = FLAGS_num_worker_threads + 1;;
     table_group_config.client_id = FLAGS_client_id;
     
     petuum::GetHostInfos(FLAGS_hostfile, &table_group_config.host_map);
-    petuum::GetServerIDsFromHostMap(&table_group_config.server_ids, table_group_config.host_map);
     if (FLAGS_consistency_model == "SSP") {
         table_group_config.consistency_model = petuum::SSP;
     } else if (FLAGS_consistency_model == "SSPPush") {
@@ -96,6 +94,12 @@ int main(int argc, char * argv[]) {
     table_config.table_info.row_capacity = sc_engine.GetM();
     // all rows put into memory, to be modified
     table_config.process_cache_capacity = (FLAGS_dictionary_size == 0? sc_engine.GetN(): FLAGS_dictionary_size);
+    table_config.table_info.row_oplog_type = FLAGS_row_oplog_type;
+    table_config.table_info.oplog_dense_serialized = FLAGS_oplog_dense_serialized;
+    table_config.table_info.dense_row_oplog_capacity = table_config.table_info.row_capacity;
+    table_config.thread_cache_capacity = 1;
+    table_config.oplog_capacity = 100;
+
     CHECK(petuum::PSTableGroup::CreateTable(0, table_config)) << "Failed to create dictionary table";
     // loss table. Single column. Each column is loss in one iteration
     int max_client_n = ceil(float(sc_engine.GetN()) / FLAGS_num_clients);
@@ -105,6 +109,11 @@ int main(int argc, char * argv[]) {
     table_config.table_info.table_staleness = 0;
     table_config.table_info.row_capacity = 1;
     table_config.process_cache_capacity = num_eval_per_client * FLAGS_num_clients * 2;
+    table_config.table_info.row_oplog_type = FLAGS_row_oplog_type;
+    table_config.table_info.oplog_dense_serialized = FLAGS_oplog_dense_serialized;
+    table_config.table_info.dense_row_oplog_capacity = table_config.table_info.row_capacity;
+    table_config.thread_cache_capacity = 1;
+    table_config.oplog_capacity = 100;
     CHECK(petuum::PSTableGroup::CreateTable(1, table_config)) << "Failed to create loss table";
     // S_table (temporary for debugging)
     //table_config.table_info.row_type = 0;
@@ -114,6 +123,7 @@ int main(int argc, char * argv[]) {
     //CHECK(petuum::PSTableGroup::CreateTable(2, table_config)) << "Failed to create dictionary table";
 
     petuum::PSTableGroup::CreateTableDone();
+    LOG(INFO) << "Create Table Done!";
 
     std::vector<std::thread> threads(FLAGS_num_worker_threads);
     for (auto & thr: threads) {
