@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Input files:
-host_filename="scripts/cogfour"
+host_filename="../../machinefiles/twoservers"
 
 # Figure out the paths.
 script_path=`readlink -f $0`
@@ -8,7 +8,6 @@ script_dir=`dirname $script_path`
 app_dir=`dirname $script_dir`
 progname=sparsecoding_main
 prog_path=$app_dir/bin/${progname}
-data_file=$(readlink -f $data_filename)
 host_file=$(readlink -f $host_filename)
 
 ssh_options="-oStrictHostKeyChecking=no \

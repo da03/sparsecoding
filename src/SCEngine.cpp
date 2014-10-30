@@ -15,6 +15,7 @@ namespace sparsecoding {
         lda::Context & context = lda::Context::get_instance();
         client_id_ = context.get_int32("client_id");
         data_file_ = context.get_string("data_file");
+        output_path_ = context.get_string("output_path");
         num_clients_ = context.get_int32("num_clients");
         num_worker_threads_ = context.get_int32("num_worker_threads");
         num_iterations_per_thread_ = context.get_int32("num_iterations_per_thread");
@@ -287,9 +288,13 @@ namespace sparsecoding {
         // output result
         petuum::PSTableGroup::GlobalBarrier();
         std::ofstream fout_loss, fout_B, fout_S, fout_time;
+        std::string str, str2;
         if (client_id_ == 0 && thread_id == 0) {
-            fout_loss.open("/home/yuntiand/public/apps/sparsecoding/data/loss.txt");
-            std::cout << "Starting output result: " << std::endl;
+            str = output_path_;
+	    str2 = "/loss.txt";
+            str = str + str2;
+            fout_loss.open(str.c_str());
+            LOG(INFO) << "Starting output result: " << std::endl;
             fout_loss << "Loss function evaluated on different clients:" << "\n";
             for (int client = 0; client < num_clients_; client++) {
                 fout_loss << "client " << client << "\t";
@@ -306,7 +311,10 @@ namespace sparsecoding {
                 fout_loss << "\n";
             }
             fout_loss.close();
-            fout_time.open("/home/yuntiand/public/apps/sparsecoding/data/time.txt");
+            str = output_path_;
+	    str2 = "/time.txt";
+            str = str + str2;
+            fout_time.open(str.c_str());
             for (int iter = 0; iter < num_eval_per_client_; iter++) {
                 for (int client = 0; client < num_clients_; client++) {
                     int row_ind = (client + num_clients_) * num_eval_per_client_ + iter;
@@ -318,7 +326,10 @@ namespace sparsecoding {
                 fout_time << "\n";
             }
 	    fout_time.close();
-            fout_B.open("/home/yuntiand/public/apps/sparsecoding/data/B.txt");
+            str = output_path_;
+	    str2 = "/B.txt";
+            str = str + str2;
+            fout_B.open(str.c_str());
             fout_B << "B:\n";
             for (int row_ind = 0; row_ind < dictionary_size_; row_ind++) {
                 B_table.Get(row_ind, &row_acc);
@@ -334,10 +345,9 @@ namespace sparsecoding {
             fout_B.close();
         }
         if (thread_id == 0) {
-            std::string str, str2;
-            str = "/home/yuntiand/public/apps/sparsecoding/data/S";
+            str = output_path_;
             char strtemp[10];
-            sprintf(strtemp, "%d.txt", client_id_);
+            sprintf(strtemp, "/S%d.txt", client_id_);
             str2 = strtemp;
             str = str + str2;
             fout_S.open(str.c_str());

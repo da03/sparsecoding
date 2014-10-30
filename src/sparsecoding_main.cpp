@@ -16,6 +16,7 @@ DEFINE_int32(num_comm_channels_per_client, 2,
  
 // Sparse Coding Parameters
 DEFINE_string(data_file, "", "Input matrix.");
+DEFINE_string(output_path, "", "Output path.");
 DEFINE_int32(dictionary_size, 0, "Size of dictionary. "
         "Default value is number of columns in input matrix.");
 DEFINE_double(lambda, 1.0, "L1 regularization strength. "

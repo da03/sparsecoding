@@ -14,9 +14,10 @@ MatrixLoader::MatrixLoader() {
 
 void MatrixLoader::Load(std::string data_file, int client_id, int num_clients) {
     FILE * fp;
-    int temp;
-    fp = fopen(data_file.c_str(), "r");
-    fscanf(fp, "%d%d", &m_, &n_);
+    float temp;
+    fp = fopen(data_file.c_str(), "rb");
+    m_ = 21504;
+    n_ = 1266734;
     num_clients_ = num_clients;
     client_id_ = client_id;
     if (client_id >= n_) {
@@ -28,9 +29,9 @@ void MatrixLoader::Load(std::string data_file, int client_id, int num_clients) {
         for (int k = 0; k < client_n_; k++) {
             data_[k].resize(m_);
         }
-        for (int i = 0; i < m_; i++) {
-            for (int j = 0; j < n_; j++) {
-                fscanf(fp, "%d", &temp);
+        for (int j = 0; j < n_; ++j) {
+            for (int i = 0; i < m_; ++i) {
+                fread(&temp, 4, 1, fp);
                 if (j % num_clients == client_id) {
                     data_[j / num_clients][i] = temp;
                 }

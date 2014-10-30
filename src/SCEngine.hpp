@@ -20,7 +20,7 @@ class SCEngine {
         float C_, lambda_;
         int dictionary_size_;
 
-        std::string data_file_;
+        std::string data_file_, output_path_;
         MatrixLoader X_matrix_loader_, S_matrix_loader_;
 
 };
