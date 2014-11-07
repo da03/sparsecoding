@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Input files:
 data_filename="/tank/projects/biglearning/pxie/mlr_svs/data/imnet/train/merge/imnet_feat.dat"
-host_filename="../../machinefiles/twoservers"
+host_filename="../../machinefiles/localserver"
 
 # Sparse Coding parameters:
 dictionary_size=10000
@@ -11,13 +11,13 @@ init_step_size=0.01
 step_size_offset=50
 step_size_pow=0.0
 mini_batch=1000
-num_eval_minibatch=10
+num_eval_minibatch=2
 # Execution parameters:
 num_worker_threads=4
 num_iterations_per_thread=200
 
 # System parameters:
-staleness=0
+staleness=5
 table_staleness=$staleness
 
 # Figure out the paths.
@@ -28,8 +28,8 @@ progname=sparsecoding_main
 prog_path=$app_dir/bin/${progname}
 data_file=$(readlink -f $data_filename)
 host_file=$(readlink -f $host_filename)
-log_path=$app_dir/log
-output_path=$app_dir/output
+log_path=$app_dir/log_0
+output_path=$app_dir/output_0
 
 ssh_options="-oStrictHostKeyChecking=no \
 -oUserKnownHostsFile=/dev/null \

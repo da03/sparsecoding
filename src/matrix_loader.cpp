@@ -17,7 +17,8 @@ void MatrixLoader::Load(std::string data_file, int client_id, int num_clients) {
     float temp;
     fp = fopen(data_file.c_str(), "rb");
     m_ = 21504;
-    n_ = 1266734;
+    //n_ = 1266734;
+    n_ = 126673;
     num_clients_ = num_clients;
     client_id_ = client_id;
     if (client_id >= n_) {

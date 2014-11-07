@@ -1,3 +1,4 @@
+// the output of B in this file is in the transpose form, which can be improved later
 #include "SCEngine.hpp"
 #include <petuum_ps_common/include/petuum_ps.hpp>
 #include "tools/context.hpp"
@@ -11,6 +12,7 @@
 namespace sparsecoding {
 
     SCEngine::SCEngine() {
+        initT_ = boost::posix_time::microsec_clock::local_time();
         thread_counter_ = 0;
         lda::Context & context = lda::Context::get_instance();
         client_id_ = context.get_int32("client_id");
@@ -30,7 +32,8 @@ namespace sparsecoding {
         X_matrix_loader_.Load(data_file_, client_id_, num_clients_);
         if (dictionary_size_ == 0)
             dictionary_size_ = X_matrix_loader_.GetN();
-        S_matrix_loader_.Load(dictionary_size_, X_matrix_loader_.GetN(), client_id_, num_clients_, -1.0, 1.0);
+        //S_matrix_loader_.Load(dictionary_size_, X_matrix_loader_.GetN(), client_id_, num_clients_, -1.0, 1.0);
+        S_matrix_loader_.Load(dictionary_size_, X_matrix_loader_.GetN(), client_id_, num_clients_, -0.0, 0.0);
 
 	int max_client_n = ceil(float(X_matrix_loader_.GetN()) / num_clients_);
 	int iter_minibatch = max_client_n / num_worker_threads_ / mini_batch_ + 1;
@@ -100,6 +103,47 @@ namespace sparsecoding {
             LOG(INFO) << "starting to initialize B";
         }
         if (client_id_ == 0 && thread_id == 0) {
+            if (false) {
+	        // Load B
+	        std::string str, str2;
+	        std::ifstream fout_B;
+                str = output_path_;
+	        str2 = "/B_cache.txt";
+                str = str + str2;
+                fout_B.open(str.c_str());
+                for (int row_ind = 0; row_ind < dictionary_size_; row_ind++) {
+                    B_table.Get(row_ind, &row_acc);
+                    petuum::UpdateBatch<float> B_update;
+                    for (int col_ind = 0; col_ind < m; col_ind++) {
+                        fout_B >> temp2_cache[col_ind];
+			B_update.Update(col_ind, temp2_cache[col_ind]);
+                    }
+		    B_table.BatchInc(row_ind, B_update);
+                }
+                fout_B.close();
+		// Load S
+       		if (thread_id == 0) {
+		    std::string str, str2;
+		    std::ifstream fout_S;
+       		    str = output_path_;
+       		    char strtemp[10];
+       		    sprintf(strtemp, "/S_cache%d.txt", client_id_);
+       		    str2 = strtemp;
+       		    str = str + str2;
+       		    fout_S.open(str.c_str());
+       		    for (int i = 0; i < client_n; i++) {
+       		        col_ind_client = i;
+       		        if (S_matrix_loader_.GetCol(col_ind_client, col_ind, S_cache)) {
+       		            for (int row_ind = 0; row_ind < dictionary_size_; row_ind++) {
+       		                fout_S >> S_inc_cache[row_ind];
+				S_inc_cache[row_ind] = S_inc_cache[row_ind] - S_cache[row_ind];
+       		            }
+			    S_matrix_loader_.IncCol(col_ind_client, S_inc_cache);
+       		        }
+       		    }
+       		    fout_S.close();
+       		}
+	    } else { // temporarily inactivate 
             srand((unsigned)time(NULL));
             for (int row_ind = 0; row_ind < dictionary_size_; row_ind++) {
                 B_table.Get(row_ind, &row_acc);
@@ -117,6 +161,7 @@ namespace sparsecoding {
                 }
                 B_table.BatchInc(row_ind, B_update);
             }
+	    }
         }
         if (thread_id == 0 && client_id_ == 0) {
             LOG(INFO) << "matrix B initialization finished!";
@@ -134,6 +179,61 @@ namespace sparsecoding {
                 LOG(INFO) << "client: " << client_id_ << "iteration: "<< iter;
             int iter_per_thread_B = (client_n / num_worker_threads_ > 0)? client_n / num_worker_threads_: 1;
             for (int iter_b = 0; iter_b * mini_batch_ < iter_per_thread_B; iter_b++) {
+	    	boost::posix_time::time_duration runTime = boost::posix_time::microsec_clock::local_time() - initT_;
+		if ((float) runTime.total_milliseconds() > 13*3600*1000) {
+		    LOG(INFO) << "maximum runtime limit activates, terminating now!";
+        	    petuum::PSTableGroup::GlobalBarrier();
+		    if (client_id_ == 0 && thread_id == 0) {
+			std::string str, str2;
+			std::ofstream fout_B;
+            	        str = output_path_;
+	                str2 = "/B_cache.txt";
+                        str = str + str2;
+                        fout_B.open(str.c_str());
+                        for (int row_ind = 0; row_ind < dictionary_size_; row_ind++) {
+                            B_table.Get(row_ind, &row_acc);
+                            const petuum::DenseRow<float> & petuum_row = row_acc.Get<petuum::DenseRow<float> >();
+                            petuum_row.CopyToVector(&petuum_row_cache);
+                            // Regularize by C_
+                            RegVec(petuum_row_cache, m, C_, reg_cache[row_ind], temp2_cache);
+                            for (int col_ind = 0; col_ind < m; col_ind++) {
+                                fout_B << temp2_cache[col_ind] << "\t";
+                            }
+                            fout_B << "\n";
+                        }
+            		fout_B.close();
+		    }
+       		    if (thread_id == 0) {
+			std::string str, str2;
+			std::ofstream fout_S;
+       		        str = output_path_;
+       		        char strtemp[10];
+       		        sprintf(strtemp, "/S_cache%d.txt", client_id_);
+       		        str2 = strtemp;
+       		        str = str + str2;
+       		        fout_S.open(str.c_str());
+       		        for (int i = 0; i < client_n; i++) {
+       		            col_ind_client = i;
+       		            if (S_matrix_loader_.GetCol(col_ind_client, col_ind, S_cache)) {
+       		                for (int row_ind = 0; row_ind < dictionary_size_; row_ind++) {
+       		                    fout_S << S_cache[row_ind] << "\t";
+       		                }
+       		                fout_S << "\n";
+       		            }
+       		        }
+       		        fout_S.close();
+       		    }
+        	    // release allocated space for cache table
+                    for (int row_ind = 0; row_ind < dictionary_size_; row_ind++) {
+                        delete [] petuum_table_cache[row_ind];
+                        delete [] petuum_update_cache[row_ind];
+                    }
+                    delete [] petuum_table_cache;
+                    delete [] petuum_update_cache;
+                    delete [] mtx;
+                    petuum::PSTableGroup::DeregisterThread();
+		    return;
+		}
                 // update petuum table cache
 		LOG(INFO) << "starting update table cache";
                 for (int row_ind = 0; row_ind < dictionary_size_; row_ind++) {
@@ -152,7 +252,7 @@ namespace sparsecoding {
             	    // evaluate partial obj
                     if (true || thread_id == 0) {
                         double obj = 0.0;
-		        int num_samples = (client_n > 2500)? 2500: client_n;
+		        int num_samples = (client_n > 250)? 250: client_n;
 			#pragma omp parallel for firstprivate(col_ind_client,col_ind,S_cache,X_cache,temp_cache, petuum_row_cache, temp2_cache) reduction(+:obj)
                         for (int i = 0; i < num_samples; i++) {
                             if (S_matrix_loader_.GetRandCol(col_ind_client, col_ind, S_cache) && X_matrix_loader_.GetCol(col_ind_client, col_ind, X_cache)) {
@@ -227,6 +327,7 @@ namespace sparsecoding {
                             S_inc_cache[row_ind] *= step_size;
                         }
                         // update S_j
+			LOG(WARNING) << "mini batch:" << num_minibatch << "inc: " << S_inc_cache[0] << "orig: " << S_cache[0];
                         S_matrix_loader_.IncCol(col_ind_client, S_inc_cache);
 
 			// get updated S_j
@@ -260,6 +361,7 @@ namespace sparsecoding {
                 }
 		// calculate updates
 		LOG(INFO)<<"start update B table";
+			LOG(WARNING) << "mini batch:" << num_minibatch << "inc of B: " << petuum_update_cache[0][0]/mini_batch_ << "orig: " << petuum_table_cache[0][0];
                 // Update B_table
                 for (int row_ind = 0; row_ind < dictionary_size_; row_ind++) {
                     petuum::UpdateBatch<float> B_update;

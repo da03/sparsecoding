@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Input files:
-host_filename="../../machinefiles/twoservers"
+host_filename="../../machinefiles/sevenservers"
 
 # Figure out the paths.
 script_path=`readlink -f $0`

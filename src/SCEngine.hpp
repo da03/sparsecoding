@@ -2,6 +2,7 @@
 #include<string>
 #include "matrix_loader.hpp"
 #include<atomic>
+#include <boost/date_time/posix_time/posix_time.hpp>
 
 namespace sparsecoding {
 class SCEngine {
@@ -22,6 +23,6 @@ class SCEngine {
 
         std::string data_file_, output_path_;
         MatrixLoader X_matrix_loader_, S_matrix_loader_;
-
+	boost::posix_time::ptime initT_;
 };
 };
