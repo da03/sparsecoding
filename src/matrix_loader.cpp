@@ -111,4 +111,36 @@ void MatrixLoader::IncCol(int j_client, std::vector<float> & inc) {
             data_[j_client][i] = MINELEVAL;
     }
 }
+
+bool MatrixLoader::GetCol(int j_client, int & j, Eigen::VectorXf & col) {
+    if (client_n_ == 0)
+        return false;
+    std::unique_lock<std::mutex> lck (*(mtx_+j_client));
+    for (int i = 0; i < m_; i++)
+        col(i) = data_[j_client][i];
+    j = j_client * num_clients_ + client_id_;
+    return true;
+}
+
+bool MatrixLoader::GetRandCol(int & j_client, int & j, Eigen::VectorXf & col) {
+    if (client_n_ == 0)
+        return false;
+    j_client = rand() % client_n_;
+    GetCol(j_client, j, col);
+    return true;
+}
+
+void MatrixLoader::IncCol(int j_client, Eigen::VectorXf & inc) {
+    std::unique_lock<std::mutex> lck (*(mtx_+j_client));
+    for (int i = 0; i < m_; i++) {
+        data_[j_client][i] += inc(i);
+        if ((data_[j_client][i] > -INFINITESIMAL) && (data_[j_client][i] < INFINITESIMAL))
+            data_[j_client][i] = 0.0;
+        if (data_[j_client][i] > MAXELEVAL)
+            data_[j_client][i] = MAXELEVAL;
+        if (data_[j_client][i] < MINELEVAL)
+            data_[j_client][i] = MINELEVAL;
+    }
+}
+
 }

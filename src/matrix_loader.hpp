@@ -3,6 +3,7 @@
 #include<atomic>
 #include<vector>
 #include<mutex>
+#include "util/Eigen/Dense"
 
 // Elements whose absolute value is smaller than INFINITESIMAL stored in matrix 
 // would be considered 0 after performing function IncCol() on that column
@@ -27,6 +28,9 @@ class MatrixLoader {
         bool GetCol(int j_client, int & j, std::vector<float> & col);
         bool GetRandCol(int & j_client, int & j, std::vector<float> & col);
         void IncCol(int j_client, std::vector<float> & inc);
+        bool GetCol(int j_client, int & j, Eigen::VectorXf & col);
+        bool GetRandCol(int & j_client, int & j, Eigen::VectorXf & col);
+        void IncCol(int j_client, Eigen::VectorXf & inc);
     private:
         std::vector<std::vector<float> > data_;
         int m_, n_;
