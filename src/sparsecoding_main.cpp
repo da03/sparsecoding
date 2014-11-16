@@ -1,9 +1,10 @@
 #include <petuum_ps_common/include/petuum_ps.hpp>
 #include <gflags/gflags.h>
 #include <glog/logging.h>
-#include "SCEngine.hpp"
 #include <vector>
 #include <thread>
+
+#include "SCEngine.hpp"
 #include "tools/context.hpp"
 
 // Petuum Parameters
@@ -11,8 +12,8 @@ DEFINE_string(hostfile, "", "Path to file containing server ip:port.");
 DEFINE_int32(num_clients, 1, "Total number of clients");
 DEFINE_int32(num_worker_threads, 4, "Number of app threads in this client");
 DEFINE_int32(client_id, 0, "Client ID");
-DEFINE_int32(num_comm_channels_per_client, 2,
-    "number of comm channels per client");
+DEFINE_int32(num_comm_channels_per_client, 2, 
+        "number of comm channels per client");
  
 // Sparse Coding Parameters
 DEFINE_string(data_file, "", "Input matrix.");
@@ -23,20 +24,33 @@ DEFINE_double(lambda, 1.0, "L1 regularization strength. "
         "Default value is 1.0.");
 DEFINE_double(c, 1.0, "L2 norm constraint on elements of dictionary. "
         "Default value is 1.0.");
-DEFINE_int32(num_iterations_per_thread, 100, 
-        "Number of iterations per thread. "
+DEFINE_int32(num_epochs, 100, "Number of epochs"
+        ", where each epoch approximately visit the whole dataset once. "
         "Default value is 0.5.");
-DEFINE_int32(mini_batch, 1, "Mini batch for SGD. Default value is 1."); 
-DEFINE_int32(num_eval_minibatch, 10, "Evaluate obj per how many minibatches. Default value is 10."); 
-DEFINE_double(init_step_size, 0.5, "SGD step size at iteration t is "
+DEFINE_int32(minibatch_size, 1, "Minibatch size for SGD. Default value is 1."); 
+DEFINE_int32(num_eval_minibatch, 10, "Evaluate obj per how many minibatches. "
+        "Default value is 10."); 
+DEFINE_int32(num_iter_S_per_minibatch, 10, 
+        "How many iterations for S per minibatch. Default value is 10."); 
+DEFINE_double(init_step_size_B, 0.5, "SGD step size for B at iteration t is "
         "init_step_size * (step_size_offset + t)^(-step_size_pow). "
         "Default value is 0.5.");
-DEFINE_double(step_size_offset, 100.0, "SGD step size at iteration t is "
+DEFINE_double(step_size_offset_B, 100.0, "SGD step size for B at iteration t is "
         "init_step_size * (step_size_offset + t)^(-step_size_pow). "
         "Default value is 100.0.");
-DEFINE_double(step_size_pow, 0.5, "SGD step size at iteration t is "
+DEFINE_double(step_size_pow_B, 0.5, "SGD step size for B at iteration t is "
         "init_step_size * (step_size_offset + t)^(-step_size_pow). "
         "Default value is 0.5.");
+DEFINE_double(init_step_size_S, 0.5, "SGD step size for S at iteration t is "
+        "init_step_size * (step_size_offset + t)^(-step_size_pow). "
+        "Default value is 0.5.");
+DEFINE_double(step_size_offset_S, 100.0, "SGD step size for S at iteration t is"
+        " init_step_size * (step_size_offset + t)^(-step_size_pow). "
+        "Default value is 100.0.");
+DEFINE_double(step_size_pow_S, 0.5, "SGD step size for S at iteration t is "
+        "init_step_size * (step_size_offset + t)^(-step_size_pow). "
+        "Default value is 0.5.");
+
 
 // Misc
 DEFINE_int32(table_staleness, 0, "Staleness for dictionary table."
@@ -45,20 +59,20 @@ DEFINE_int32(table_staleness, 0, "Staleness for dictionary table."
 // No need to change the following
 DEFINE_string(stats_path, "", "Statistics output file.");
 DEFINE_string(consistency_model, "SSPPush", "SSP or SSPPush or ...");
-DEFINE_int32(row_oplog_type, petuum::RowOpLogType::kDenseRowOpLog, "row oplog type");
+DEFINE_int32(row_oplog_type, petuum::RowOpLogType::kDenseRowOpLog, 
+        "row oplog type");
 DEFINE_bool(oplog_dense_serialized, true, "dense serialized oplog");
 
 int main(int argc, char * argv[]) {
     google::ParseCommandLineFlags(&argc, &argv, true);
     google::InitGoogleLogging(argv[0]);
-    //google::SetLogDestination(google::INFO, "/home/yuntiand/internal/apps/sparsecoding/log/INFO.txt");
 
     petuum::TableGroupConfig table_group_config;
     table_group_config.num_comm_channels_per_client
       = FLAGS_num_comm_channels_per_client;
     table_group_config.num_total_clients = FLAGS_num_clients;
-    // dictionary table and loss table
-    table_group_config.num_tables = 2;                  // one more table for debugging
+    // Dictionary table and loss table
+    table_group_config.num_tables = 2;
     // + 1 for main()
     table_group_config.num_local_app_threads = FLAGS_num_worker_threads + 1;;
     table_group_config.client_id = FLAGS_client_id;
@@ -73,55 +87,63 @@ int main(int argc, char * argv[]) {
     } else {
         LOG(FATAL) << "Unknown consistency model: " << FLAGS_consistency_model;
     }
-    // stats
+    // Stats
     table_group_config.stats_path = FLAGS_stats_path;
-    // configure row types
+    // Configure row types
     petuum::PSTableGroup::RegisterRow<petuum::DenseRow<float> >(0);
 
-    // start PS
+    // Start PS
     petuum::PSTableGroup::Init(table_group_config, false);
 
-    // load data
+    // Load data
     STATS_APP_LOAD_DATA_BEGIN();
     sparsecoding::SCEngine sc_engine;
     LOG(INFO) << "Data loaded!";
     STATS_APP_LOAD_DATA_END();
 
-    // create PS table
+    // Create PS table
+    //
     // B_table (dictionary_size by number of rows in input matrix)
     petuum::ClientTableConfig table_config;
     table_config.table_info.row_type = 0;
     table_config.table_info.table_staleness = FLAGS_table_staleness;
     table_config.table_info.row_capacity = sc_engine.GetM();
-    // all rows put into memory, to be modified
-    table_config.process_cache_capacity = (FLAGS_dictionary_size == 0? sc_engine.GetN(): FLAGS_dictionary_size);
+    // Assume all rows put into memory
+    table_config.process_cache_capacity = 
+        (FLAGS_dictionary_size == 0? sc_engine.GetN(): FLAGS_dictionary_size);
     table_config.table_info.row_oplog_type = FLAGS_row_oplog_type;
-    table_config.table_info.oplog_dense_serialized = FLAGS_oplog_dense_serialized;
-    table_config.table_info.dense_row_oplog_capacity = table_config.table_info.row_capacity;
+    table_config.table_info.oplog_dense_serialized = 
+        FLAGS_oplog_dense_serialized;
+    table_config.table_info.dense_row_oplog_capacity = 
+        table_config.table_info.row_capacity;
     table_config.thread_cache_capacity = 1;
     table_config.oplog_capacity = 100;
 
-    CHECK(petuum::PSTableGroup::CreateTable(0, table_config)) << "Failed to create dictionary table";
+    CHECK(petuum::PSTableGroup::CreateTable(0, table_config)) 
+        << "Failed to create dictionary table";
+
     // loss table. Single column. Each column is loss in one iteration
     int max_client_n = ceil(float(sc_engine.GetN()) / FLAGS_num_clients);
-    int iter_minibatch = (max_client_n / FLAGS_num_worker_threads / FLAGS_mini_batch + 1);
-    int num_eval_per_client = (FLAGS_num_iterations_per_thread * iter_minibatch - 1) / FLAGS_num_eval_minibatch + 1;
+    int iter_minibatch = 
+        max_client_n / FLAGS_num_worker_threads / FLAGS_minibatch_size + 1;
+    int num_eval_per_client = 
+        (FLAGS_num_epochs * iter_minibatch - 1) 
+          / FLAGS_num_eval_minibatch + 1;
     table_config.table_info.row_type = 0;
     table_config.table_info.table_staleness = 0;
     table_config.table_info.row_capacity = 1;
-    table_config.process_cache_capacity = num_eval_per_client * FLAGS_num_clients * 2;
+    table_config.process_cache_capacity = 
+        num_eval_per_client * FLAGS_num_clients * 2;
     table_config.table_info.row_oplog_type = FLAGS_row_oplog_type;
-    table_config.table_info.oplog_dense_serialized = FLAGS_oplog_dense_serialized;
-    table_config.table_info.dense_row_oplog_capacity = table_config.table_info.row_capacity;
+    table_config.table_info.oplog_dense_serialized = 
+        FLAGS_oplog_dense_serialized;
+    table_config.table_info.dense_row_oplog_capacity = 
+        table_config.table_info.row_capacity;
     table_config.thread_cache_capacity = 1;
     table_config.oplog_capacity = 100;
-    CHECK(petuum::PSTableGroup::CreateTable(1, table_config)) << "Failed to create loss table";
-    // S_table (temporary for debugging)
-    //table_config.table_info.row_type = 0;
-    //table_config.table_info.table_staleness = 0;
-    //table_config.table_info.row_capacity = (FLAGS_dictionary_size == 0? sc_engine.GetN(): FLAGS_dictionary_size);
-    //table_config.process_cache_capacity = sc_engine.GetN(); 
-    //CHECK(petuum::PSTableGroup::CreateTable(2, table_config)) << "Failed to create dictionary table";
+
+    CHECK(petuum::PSTableGroup::CreateTable(1, table_config))
+        << "Failed to create loss table";
 
     petuum::PSTableGroup::CreateTableDone();
     LOG(INFO) << "Create Table Done!";

@@ -3,7 +3,7 @@
 #include<atomic>
 #include<vector>
 #include<mutex>
-#include "util/Eigen/Dense"
+#include <util/Eigen/Dense>
 
 // Elements whose absolute value is smaller than INFINITESIMAL stored in matrix 
 // would be considered 0 after performing function IncCol() on that column

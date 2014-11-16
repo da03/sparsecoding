@@ -1,8 +1,9 @@
 #pragma once
 #include<string>
-#include "matrix_loader.hpp"
 #include<atomic>
 #include <boost/date_time/posix_time/posix_time.hpp>
+
+#include "matrix_loader.hpp"
 
 namespace sparsecoding {
 class SCEngine {
@@ -14,15 +15,29 @@ class SCEngine {
         int GetN();
     private:
         std::atomic<int> thread_counter_;
-        int client_id_, num_clients_;
-        int num_iterations_per_thread_, num_worker_threads_, mini_batch_, num_eval_per_client_, num_eval_minibatch_;
 
-        float init_step_size_, step_size_offset_, step_size_pow_;
-        float C_, lambda_;
+        // petuum parameters
+        int client_id_, num_clients_, num_worker_threads_;
+        
+        // objective function parameters
         int dictionary_size_;
+        float C_, lambda_;
 
+        // minibatch and evaluate parameters
+        int num_epochs_, minibatch_size_, num_eval_minibatch_, 
+            num_iter_S_per_minibatch_, num_eval_per_client_;
+
+        // optimization parameters
+        float init_step_size_B_, step_size_offset_B_, step_size_pow_B_, 
+              init_step_size_S_, step_size_offset_S_, step_size_pow_S_;
+
+        // input and output path
         std::string data_file_, output_path_;
+
+        // matrix loader for data X and dictionary S
         MatrixLoader X_matrix_loader_, S_matrix_loader_;
-	boost::posix_time::ptime initT_;
+
+        // timer
+        boost::posix_time::ptime initT_;
 };
-};
+}; // namespace sparsecoding

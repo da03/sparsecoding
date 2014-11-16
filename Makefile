@@ -11,7 +11,9 @@ SPARSECODING_BIN = $(SPARSECODING_DIR)/bin
 SPARSECODING_OBJ = $(SPARSECODING_SRC:.cpp=.o)
 TOOLS_OBJ= $(TOOLS_SRC:.cpp=.o)
 PETUUM_CXXFLAGS:=$(PETUUM_CXXFLAGS) -fopenmp
-all: sparsecoding_main
+PETUUM_INCFLAGS:=$(PETUUM_INCFLAGS) -I$(SPARSECODING_DIR)
+
+)all: sparsecoding_main
 
 sparsecoding_main: $(SPARSECODING_BIN)/sparsecoding_main
 
