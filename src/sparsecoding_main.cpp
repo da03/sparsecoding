@@ -5,9 +5,9 @@
 #include <thread>
 
 #include "SCEngine.hpp"
-#include "tools/context.hpp"
+#include "util/context.hpp"
 
-// Petuum Parameters
+/* Petuum Parameters */
 DEFINE_string(hostfile, "", "Path to file containing server ip:port.");
 DEFINE_int32(num_clients, 1, "Total number of clients");
 DEFINE_int32(num_worker_threads, 4, "Number of app threads in this client");
@@ -15,21 +15,34 @@ DEFINE_int32(client_id, 0, "Client ID");
 DEFINE_int32(num_comm_channels_per_client, 2, 
         "number of comm channels per client");
  
-// Sparse Coding Parameters
+/* Sparse Coding Parameters */
+// Input and Output
 DEFINE_string(data_file, "", "Input matrix.");
-DEFINE_string(output_path, "", "Output path.");
+DEFINE_string(data_format, "", "Format of input matrix file"
+        ", can be \"binary\" or \"text\".");
+DEFINE_bool(is_partitioned, false, 
+        "Whether or not the input file has been partitioned");
+DEFINE_string(output_path, "", "Output path. Must be an existing directory.");
+// Objective function parameters
+DEFINE_int32(m, 0, "Number of rows in input matrix. ");
+DEFINE_int32(n, 0, "Number of columns in input matrix. ");
 DEFINE_int32(dictionary_size, 0, "Size of dictionary. "
         "Default value is number of columns in input matrix.");
-DEFINE_double(lambda, 1.0, "L1 regularization strength. "
-        "Default value is 1.0.");
 DEFINE_double(c, 1.0, "L2 norm constraint on elements of dictionary. "
         "Default value is 1.0.");
+DEFINE_double(lambda, 1.0, "L1 regularization strength. "
+        "Default value is 1.0.");
+// Optimization parameters
 DEFINE_int32(num_epochs, 100, "Number of epochs"
         ", where each epoch approximately visit the whole dataset once. "
         "Default value is 0.5.");
 DEFINE_int32(minibatch_size, 1, "Minibatch size for SGD. Default value is 1."); 
 DEFINE_int32(num_eval_minibatch, 10, "Evaluate obj per how many minibatches. "
         "Default value is 10."); 
+DEFINE_int32(num_eval_samples, 10, "Evaluate obj by sampling how many points."
+        " Default value is 10."); 
+DEFINE_int32(num_iter_B_per_minibatch, 10, 
+        "How many iterations for B per minibatch. Default value is 10."); 
 DEFINE_int32(num_iter_S_per_minibatch, 10, 
         "How many iterations for S per minibatch. Default value is 10."); 
 DEFINE_double(init_step_size_B, 0.5, "SGD step size for B at iteration t is "
@@ -52,11 +65,11 @@ DEFINE_double(step_size_pow_S, 0.5, "SGD step size for S at iteration t is "
         "Default value is 0.5.");
 
 
-// Misc
+/* Misc */
 DEFINE_int32(table_staleness, 0, "Staleness for dictionary table."
         "Default value is 0.");
 
-// No need to change the following
+/* No need to change the following */
 DEFINE_string(stats_path, "", "Statistics output file.");
 DEFINE_string(consistency_model, "SSPPush", "SSP or SSPPush or ...");
 DEFINE_int32(row_oplog_type, petuum::RowOpLogType::kDenseRowOpLog, 
@@ -107,10 +120,10 @@ int main(int argc, char * argv[]) {
     petuum::ClientTableConfig table_config;
     table_config.table_info.row_type = 0;
     table_config.table_info.table_staleness = FLAGS_table_staleness;
-    table_config.table_info.row_capacity = sc_engine.GetM();
+    table_config.table_info.row_capacity = FLAGS_m;
     // Assume all rows put into memory
     table_config.process_cache_capacity = 
-        (FLAGS_dictionary_size == 0? sc_engine.GetN(): FLAGS_dictionary_size);
+        (FLAGS_dictionary_size == 0? FLAGS_n: FLAGS_dictionary_size);
     table_config.table_info.row_oplog_type = FLAGS_row_oplog_type;
     table_config.table_info.oplog_dense_serialized = 
         FLAGS_oplog_dense_serialized;
@@ -123,7 +136,7 @@ int main(int argc, char * argv[]) {
         << "Failed to create dictionary table";
 
     // loss table. Single column. Each column is loss in one iteration
-    int max_client_n = ceil(float(sc_engine.GetN()) / FLAGS_num_clients);
+    int max_client_n = ceil(float(FLAGS_n) / FLAGS_num_clients);
     int iter_minibatch = 
         max_client_n / FLAGS_num_worker_threads / FLAGS_minibatch_size + 1;
     int num_eval_per_client = 

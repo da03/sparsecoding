@@ -11,8 +11,6 @@ class SCEngine {
         SCEngine();
         ~SCEngine();
         void Start();
-        int GetM();
-        int GetN();
     private:
         std::atomic<int> thread_counter_;
 
@@ -25,17 +23,19 @@ class SCEngine {
 
         // minibatch and evaluate parameters
         int num_epochs_, minibatch_size_, num_eval_minibatch_, 
-            num_iter_S_per_minibatch_, num_eval_per_client_;
+            num_iter_S_per_minibatch_, num_iter_B_per_minibatch_,
+            num_eval_samples_, num_eval_per_client_;
 
         // optimization parameters
         float init_step_size_B_, step_size_offset_B_, step_size_pow_B_, 
               init_step_size_S_, step_size_offset_S_, step_size_pow_S_;
 
-        // input and output path
-        std::string data_file_, output_path_;
+        // input and output
+        std::string data_file_, data_format_, output_path_;
+        bool is_partitioned_;
 
         // matrix loader for data X and dictionary S
-        MatrixLoader X_matrix_loader_, S_matrix_loader_;
+        MatrixLoader<float> X_matrix_loader_, S_matrix_loader_;
 
         // timer
         boost::posix_time::ptime initT_;

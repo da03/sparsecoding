@@ -7,47 +7,71 @@
 #include <cmath>
 #include <mutex>
 #include <boost/date_time/posix_time/posix_time.hpp>
-
 #include <petuum_ps_common/include/petuum_ps.hpp>
-#include <util/Eigen/Dense>
-#include "tools/context.hpp"
+
+#include "util/Eigen/Dense"
+#include "util/context.hpp"
 
 namespace sparsecoding {
 
-    SCEngine::SCEngine() {
+    SCEngine::SCEngine(): thread_counter_(0) {
         // timer
         initT_ = boost::posix_time::microsec_clock::local_time();
-        thread_counter_ = 0;
+
+        /* context */
         lda::Context & context = lda::Context::get_instance();
-        client_id_ = context.get_int32("client_id");
+        // input and output
         data_file_ = context.get_string("data_file");
+        data_format_ = context.get_string("data_format");
+        is_partitioned_ = context.get_bool("is_partitioned");
         output_path_ = context.get_string("output_path");
+
+        // objective function parameters
+        int m = context.get_int32("m");
+        int n = context.get_int32("n");
+        dictionary_size_ = context.get_int32("dictionary_size");
+        C_ = context.get_double("c");
+        lambda_ = context.get_double("lambda");
+
+        // petuum parameters
+        client_id_ = context.get_int32("client_id");
         num_clients_ = context.get_int32("num_clients");
         num_worker_threads_ = context.get_int32("num_worker_threads");
+
+        // optimization parameters
         num_epochs_ = context.get_int32("num_epochs");
         minibatch_size_ = context.get_int32("minibatch_size");
         num_eval_minibatch_ = context.get_int32("num_eval_minibatch");
-        dictionary_size_ = context.get_int32("dictionary_size");
+        num_eval_samples_ = context.get_int32("num_eval_samples");
         init_step_size_B_ = context.get_double("init_step_size_B");
         step_size_offset_B_ = context.get_double("step_size_offset_B");
         step_size_pow_B_ = context.get_double("step_size_pow_B");
-
+        num_iter_B_per_minibatch_ = 
+            context.get_int32("num_iter_B_per_minibatch");
         num_iter_S_per_minibatch_ = 
             context.get_int32("num_iter_S_per_minibatch");
         init_step_size_S_ = context.get_double("init_step_size_S");
         step_size_offset_S_ = context.get_double("step_size_offset_S");
         step_size_pow_S_ = context.get_double("step_size_pow_S");
-        C_ = context.get_double("c");
-        lambda_ = context.get_double("lambda");
 
-        X_matrix_loader_.Load(data_file_, client_id_, num_clients_);
+        /* Init matrices */
+        // Partition by column id mod num_clients_
+        int client_n = (n - (n / num_clients_) * num_clients_ > client_id_)?
+            n / num_clients_ + 1: n / num_clients_;
+        // Init matrix loader of data matrix X
+        if (is_partitioned_) {
+            X_matrix_loader_.Init(data_file_, data_format_, m, client_n);
+        } else {
+            X_matrix_loader_.Init(data_file_, data_format_, m, n, 
+                    client_id_, num_clients_);
+        }
+
+        // Init matrix loader of coefficients S
         if (dictionary_size_ == 0)
-            dictionary_size_ = X_matrix_loader_.GetN();
+            dictionary_size_ = n; 
+        S_matrix_loader_.Init(dictionary_size_, client_n, -0.0, 0.0);
 
-        S_matrix_loader_.Load(dictionary_size_, X_matrix_loader_.GetN(), 
-                client_id_, num_clients_, -0.0, 0.0);
-
-	    int max_client_n = ceil(float(X_matrix_loader_.GetN()) / num_clients_);
+	    int max_client_n = ceil(float(n) / num_clients_);
 	    int iter_minibatch = 
             max_client_n / num_worker_threads_ / minibatch_size_ + 1;
 	    num_eval_per_client_ = 
@@ -55,15 +79,18 @@ namespace sparsecoding {
               / num_eval_minibatch_ + 1;
     }
 
-    inline void RegVec(std::vector<float> & inc, int len, float C, 
+    // Helper function, regularize a vector vec 
+    // such that its l2-norm is smaller than C
+    inline void RegVec(std::vector<float> & vec, float C, 
             std::vector<float> & vec_result) {
         float sum = 0.0;
+        int len = vec.size();
         for (int i = 0; i < len; i++) {
-            sum += inc[i] * inc[i];
+            sum += vec[i] * vec[i];
         }
         float ratio = (sum > C? sqrt(C / sum): 1.0);
         for (int i = 0; i < len; i++) {
-            vec_result[i] = inc[i] * ratio;
+            vec_result[i] = vec[i] * ratio;
         }
     }
 
@@ -88,7 +115,7 @@ namespace sparsecoding {
         // petuum table accessor
         petuum::RowAccessor row_acc;
         // column id
-        int col_id, col_id_client;
+        int col_id_client;
 
 
         // Cache dictionary table 
@@ -146,8 +173,7 @@ namespace sparsecoding {
        		    fout_S.open(str.c_str());
        		    for (int col_id_client = 0; col_id_client < client_n; 
                         ++col_id_client) {
-       		        if (S_matrix_loader_.GetCol(col_id_client, 
-                                col_id, S_cache)) {
+       		        if (S_matrix_loader_.GetCol(col_id_client, S_cache)) {
        		            for (int row_id = 0; row_id < dictionary_size_; 
                                 ++row_id) {
        		                fout_S >> S_inc_cache[row_id];
@@ -193,15 +219,14 @@ namespace sparsecoding {
         // Step size for optimization
         float step_size_B = init_step_size_B_, step_size_S = init_step_size_S_;
 
+        int num_minibatch = 0;
         for (int iter = 0; iter < num_epochs_; ++iter) {
-	        if (thread_id == 0)
-                LOG(INFO) << "client: " << client_id_ << "iteration: "<< iter;
 
             // how many minibatches per epoch
             int minibatch_per_epoch = (client_n / num_worker_threads_ > 0)? 
                 client_n / num_worker_threads_: 1;
-            for (int num_minibatch = 0; num_minibatch * minibatch_size_ 
-                    < minibatch_per_epoch; ++num_minibatch) {
+            for (int iter_per_epoch = 0; iter_per_epoch * minibatch_size_ 
+                    < minibatch_per_epoch; ++iter_per_epoch) {
 	    	    boost::posix_time::time_duration runTime = 
                     boost::posix_time::microsec_clock::local_time() - initT_;
                 // Terminate and save states to disk
@@ -224,7 +249,7 @@ namespace sparsecoding {
                                 row_acc.Get<petuum::DenseRow<float> >();
                             petuum_row.CopyToVector(&petuum_row_cache);
                             // Regularize by C_
-                            RegVec(petuum_row_cache, m, C_, B_row_cache);
+                            RegVec(petuum_row_cache, C_, B_row_cache);
                             for (int col_id = 0; col_id < m; ++col_id) {
                                 fout_B << B_row_cache[col_id] << "\t";
                             }
@@ -245,11 +270,11 @@ namespace sparsecoding {
        		            fout_S.open(str.c_str());
        		            for (int col_id_client = 0; col_id_client < client_n; 
                                 ++col_id_client) {
-       		                if (S_matrix_loader_.GetCol(col_id_client, 
-                                    col_id, S_cache)) {
+       		                if (S_matrix_loader_.
+                                    GetCol(col_id_client, S_cache)) {
        		                    for (int row_id = 0; row_id < dictionary_size_; 
                                     ++row_id) {
-       		                    fout_S << S_cache[row_id] << "\t";
+       		                        fout_S << S_cache[row_id] << "\t";
        		                    }
        		                    fout_S << "\n";
        		                }
@@ -260,7 +285,7 @@ namespace sparsecoding {
 		            return;
 		        }
                 // Update petuum table cache
-		        LOG(INFO) << "starting update table cache";
+		        //LOG(INFO) << "starting update table cache";
                 for (int row_id = 0; row_id < dictionary_size_; ++row_id) {
                     B_table.Get(row_id, &row_acc);
                     const petuum::DenseRow<float> & petuum_row = 
@@ -271,21 +296,26 @@ namespace sparsecoding {
                             petuum_row_cache[col_id];
                     }
                 }
-		        LOG(INFO) << "finished starting update table cache";
+		        //LOG(INFO) << "finished starting update table cache";
 		        // evaluate obj
 		        if (num_minibatch % num_eval_minibatch_ == 0) {
 	    	        boost::posix_time::time_duration elapTime = 
                         boost::posix_time::microsec_clock::local_time() - beginT;
-                    LOG(INFO) <<"evaluating obj";
+                    //LOG(INFO) <<"evaluating obj";
             	    // evaluate partial obj
                     double obj = 0.0;
                     double obj1 = 0.0;
                     double obj2 = 0.0;
-		            int num_samples = (client_n > 250)? 250: client_n;
+		            int num_samples = num_eval_samples_;
+                    for (int i = 0; i < dictionary_size_; i++) {
+                        float regularizer = petuum_table_cache.col(i).norm();
+                        regularizer = 
+                            (regularizer > sqrt(C_))? sqrt(C_) / regularizer: 1.0;
+                        petuum_table_cache.col(i) *= regularizer;
+                    }
                     for (int i = 0; i < num_samples; i++) {
-                        if (S_matrix_loader_.GetRandCol(col_id_client, 
-                                    col_id, Sj) && X_matrix_loader_.GetCol(
-                                        col_id_client, col_id, Xj)) {
+                        if (S_matrix_loader_.GetRandCol(col_id_client, Sj) 
+                                && X_matrix_loader_.GetCol(col_id_client, Xj)) {
                             // X_j - B * S_j
 				            Xj_inc = Xj - petuum_table_cache * Sj;
 				            obj1 += Xj_inc.squaredNorm();
@@ -293,12 +323,12 @@ namespace sparsecoding {
                         }
                     }
 		            obj = (obj1+obj2) / num_samples;
-                    LOG(ERROR) << "minibatch: " << num_minibatch << ", client " 
-                        << client_id_ << "/" << num_clients_ << 
+                    LOG(INFO) << "iter: " << num_minibatch << ", client " 
+                        << client_id_ << 
                         " average objective: " << obj;
-                    LOG(ERROR) << "minibatch: " << num_minibatch << ", client " 
-                        << client_id_ << "/" << num_clients_ <<" obj 1: " << 
-                        obj1 / num_samples << " obj2: "<< obj2/num_samples;
+                    //LOG(INFO) << "iter: " << num_minibatch << ", client " 
+                    //    << client_id_ << "/" << num_clients_ <<" obj 1: " << 
+                    //    obj1 / num_samples << " obj2: "<< obj2/num_samples;
                     // update loss table
                     loss_table.Inc(client_id_ * num_eval_per_client_ + 
                             num_minibatch / num_eval_minibatch_,  0, 
@@ -308,7 +338,7 @@ namespace sparsecoding {
                             ((float) elapTime.total_milliseconds()) / 1000 
                             / num_worker_threads_);
         	    	beginT = boost::posix_time::microsec_clock::local_time();
-                        LOG(INFO) <<"finished evaluating obj";
+                        //LOG(INFO) <<"finished evaluating obj";
 		        }
                 step_size_B = init_step_size_B_ * 
                     pow(step_size_offset_B_ + num_minibatch, 
@@ -318,37 +348,57 @@ namespace sparsecoding {
                             -1*step_size_pow_S_);
 		        num_minibatch++;
             	// clear update table
-            	for (int row_id = 0; row_id < dictionary_size_; ++row_id) {
-                    for (int col_id = 0; col_id < m; ++col_id) {
-                        petuum_update_cache(col_id, row_id) = 0.0;
-                    }
-            	}
+                petuum_update_cache.fill(0.0);
                 // mini batch
-		        LOG(INFO)<<"starting minibatch" << num_minibatch << ", client "
-                    << client_id_ << ", thread " << thread_id;
+		        //LOG(INFO)<<"starting iteration" << num_minibatch << ", client "
+                //    << client_id_ << ", thread " << thread_id;
+                std::vector<float> Sj_inc_debug(num_iter_S_per_minibatch_);
+                for(int i=0;i<num_iter_S_per_minibatch_;i++)
+                    Sj_inc_debug[i] = 0.0;
                 for (int k = 0; k < minibatch_size_; ++k) {
-                    if (S_matrix_loader_.GetRandCol(col_id_client, col_id, Sj)
-                            && X_matrix_loader_.GetCol(col_id_client, col_id, 
-                                Xj)) {
+                    if (S_matrix_loader_.GetRandCol(col_id_client, Sj)
+                            && X_matrix_loader_.GetCol(col_id_client, Xj)) {
                         // update S_j
                         for (int iter_S = 0; 
                                 iter_S < num_iter_S_per_minibatch_; ++iter_S) {
+                            // compute gradient of Sj
 		                    Sj_inc = step_size_S * (petuum_table_cache.transpose() 
                                     * (Xj - petuum_table_cache * Sj) - lambda_ 
-                                    * (Sj.array().abs() > INFINITESIMAL)
+                                    * (Sj.array() > INFINITESIMAL)
+                                    .matrix().cast<float>() 
+                                    + lambda_ * (Sj.array() < -INFINITESIMAL)
                                     .matrix().cast<float>() );
+                            // set gradient where the element is 0 to 0 
+                            // if the gradient is smaller than lambda_
+                            Sj_inc = (Sj_inc.array() * 
+                                    ( (Sj.array().abs() > INFINITESIMAL)
+                                     + (Sj_inc.array().abs() > 
+                                         lambda_ * step_size_S) )
+                                    .cast<float>()).matrix();
+
                             S_matrix_loader_.IncCol(col_id_client, Sj_inc);
+                        
 			                // get updated S_j
-			                S_matrix_loader_.GetCol(col_id_client, col_id, Sj);
+			                S_matrix_loader_.GetCol(col_id_client, Sj);
+                            Sj_inc_debug[iter_S] += Sj_inc.array().abs().matrix().sum() / dictionary_size_;
                         }
-                        // X_j - B * S_j
-			            Xj_inc = Xj - petuum_table_cache * Sj;
-			            petuum_update_cache.noalias() += 
-                            step_size_B * Xj_inc * Sj.transpose();
+                        // update B
+                        for (int iter_B = 0; 
+                                iter_B < num_iter_B_per_minibatch_; ++iter_B) {
+			                Xj_inc = Xj - petuum_table_cache * Sj;
+			                petuum_update_cache.noalias() += 
+                                step_size_B * Xj_inc * Sj.transpose();
+                            petuum_table_cache.noalias() += step_size_B * Xj_inc * Sj.transpose();
+                        }
                     }
                 }
+                for(int i=0;i<num_iter_S_per_minibatch_;i++) {
+                    //LOG(ERROR)<<"minibatch: "<<num_minibatch<<", iter_S: "<<i<<", Sj_inc:"<<Sj_inc_debug[i];
+                }
+                    //LOG(ERROR)<<"minibatch: "<<num_minibatch<<", iter_S: "<<", Sj_inc:"<<Sj_inc_debug[0];
+                    //LOG(ERROR)<<"minibatch: "<<num_minibatch<<", B_inc:"<<petuum_update_cache.array().abs().sum()/m/dictionary_size_;
 		        // calculate updates
-		        LOG(INFO)<<"start update B table";
+		        //LOG(INFO)<<"start update B table";
                 // Update B_table
                 for (int row_id = 0; row_id < dictionary_size_; ++row_id) {
                     petuum::UpdateBatch<float> B_update;
@@ -367,7 +417,7 @@ namespace sparsecoding {
                     const petuum::DenseRow<float> & petuum_row = 
                         row_acc.Get<petuum::DenseRow<float> >();
                     petuum_row.CopyToVector(&petuum_row_cache);
-                    RegVec(petuum_row_cache, m, C_, B_row_cache);
+                    RegVec(petuum_row_cache, C_, B_row_cache);
                     petuum::UpdateBatch<float> B_update;
                     for (int col_id = 0; col_id < m; ++col_id) {
                         B_update.Update(col_id, 
@@ -377,7 +427,7 @@ namespace sparsecoding {
                     }
                     B_table.BatchInc(row_id, B_update);
                 }
-		        LOG(INFO)<<"update B table ends";
+		        //LOG(INFO)<<"update B table ends";
                 petuum::PSTableGroup::Clock(); 
             }
         }
@@ -437,7 +487,7 @@ namespace sparsecoding {
                     row_acc.Get<petuum::DenseRow<float> >();
                 petuum_row.CopyToVector(&petuum_row_cache);
                 // Regularize by C_
-                RegVec(petuum_row_cache, m, C_, B_row_cache);
+                RegVec(petuum_row_cache, C_, B_row_cache);
                 for (int col_id = 0; col_id < m; ++col_id) {
                     fout_B << B_row_cache[col_id] << "\t";
                 }
@@ -454,7 +504,7 @@ namespace sparsecoding {
             fout_S.open(str.c_str());
             for (int col_id_client = 0; col_id_client < client_n; 
                     ++col_id_client) {
-                if (S_matrix_loader_.GetCol(col_id_client, col_id, S_cache)) {
+                if (S_matrix_loader_.GetCol(col_id_client, S_cache)) {
                     for (int row_id = 0; row_id < dictionary_size_; ++row_id) {
                         fout_S << S_cache[row_id] << "\t";
                     }
@@ -464,14 +514,6 @@ namespace sparsecoding {
             fout_S.close();
         }
         petuum::PSTableGroup::DeregisterThread();
-    }
-
-    int SCEngine::GetM() {
-        return X_matrix_loader_.GetM();
-    }
-
-    int SCEngine::GetN() {
-        return X_matrix_loader_.GetN();
     }
 
     SCEngine::~SCEngine() {
