@@ -338,7 +338,6 @@ namespace sparsecoding {
                             ((float) elapTime.total_milliseconds()) / 1000 
                             / num_worker_threads_);
         	    	beginT = boost::posix_time::microsec_clock::local_time();
-                        //LOG(INFO) <<"finished evaluating obj";
 		        }
                 step_size_B = init_step_size_B_ * 
                     pow(step_size_offset_B_ + num_minibatch, 
@@ -350,8 +349,6 @@ namespace sparsecoding {
             	// clear update table
                 petuum_update_cache.fill(0.0);
                 // mini batch
-		        //LOG(INFO)<<"starting iteration" << num_minibatch << ", client "
-                //    << client_id_ << ", thread " << thread_id;
                 std::vector<float> Sj_inc_debug(num_iter_S_per_minibatch_);
                 for(int i=0;i<num_iter_S_per_minibatch_;i++)
                     Sj_inc_debug[i] = 0.0;
@@ -392,13 +389,7 @@ namespace sparsecoding {
                         }
                     }
                 }
-                for(int i=0;i<num_iter_S_per_minibatch_;i++) {
-                    //LOG(ERROR)<<"minibatch: "<<num_minibatch<<", iter_S: "<<i<<", Sj_inc:"<<Sj_inc_debug[i];
-                }
-                    //LOG(ERROR)<<"minibatch: "<<num_minibatch<<", iter_S: "<<", Sj_inc:"<<Sj_inc_debug[0];
-                    //LOG(ERROR)<<"minibatch: "<<num_minibatch<<", B_inc:"<<petuum_update_cache.array().abs().sum()/m/dictionary_size_;
 		        // calculate updates
-		        //LOG(INFO)<<"start update B table";
                 // Update B_table
                 for (int row_id = 0; row_id < dictionary_size_; ++row_id) {
                     petuum::UpdateBatch<float> B_update;
@@ -427,7 +418,6 @@ namespace sparsecoding {
                     }
                     B_table.BatchInc(row_id, B_update);
                 }
-		        //LOG(INFO)<<"update B table ends";
                 petuum::PSTableGroup::Clock(); 
             }
         }
@@ -441,12 +431,7 @@ namespace sparsecoding {
 	        str2 = "/loss.txt";
             str = str + str2;
             fout_loss.open(str.c_str());
-            LOG(INFO) << "Starting output result: " << std::endl;
-            fout_loss << "Loss function evaluated on different clients:" << "\n";
-            for (int client = 0; client < num_clients_; client++) {
-                fout_loss << "client " << client << "\t";
-            }
-            fout_loss << "\n";
+            LOG(INFO) << "Starting output result to directory " << output_path_;
             for (int iter = 0; iter < num_eval_per_client_; ++iter) {
                 for (int client = 0; client < num_clients_; ++client) {
                     int row_id = client * num_eval_per_client_ + iter;
@@ -480,7 +465,6 @@ namespace sparsecoding {
 	        str2 = "/B.txt";
             str = str + str2;
             fout_B.open(str.c_str());
-            fout_B << "B:\n";
             for (int row_id = 0; row_id < dictionary_size_; ++row_id) {
                 B_table.Get(row_id, &row_acc);
                 const petuum::DenseRow<float> & petuum_row = 
