@@ -431,7 +431,7 @@ namespace sparsecoding {
 	        str2 = "/loss.txt";
             str = str + str2;
             fout_loss.open(str.c_str());
-            LOG(INFO) << "Starting output result to directory " << output_path_;
+            LOG(INFO) << "Writing result to directory " << output_path_;
             for (int iter = 0; iter < num_eval_per_client_; ++iter) {
                 for (int client = 0; client < num_clients_; ++client) {
                     int row_id = client * num_eval_per_client_ + iter;

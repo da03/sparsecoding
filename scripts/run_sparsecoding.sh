@@ -18,21 +18,22 @@ dictionary_size=10000
 c=1.0
 lambda=0.01
 # Optimization parameters
+num_epochs=200
+minibatch_size=100
 init_step_size_B=0.01
 step_size_offset_B=50
 step_size_pow_B=0.0
-minibatch_size=100
+num_iter_B_per_minibatch=1
 num_iter_S_per_minibatch=100
 init_step_size_S=0.1
 step_size_offset_S=50
 step_size_pow_S=0.0
 # Evaluateion parameters
 num_eval_minibatch=1
-# Execution parameters
-num_worker_threads=8
-num_epochs=200
+num_eval_samples=100
 
 # System parameters:
+num_worker_threads=8
 staleness=100
 table_staleness=$staleness
 
@@ -46,6 +47,14 @@ data_file=$(readlink -f $data_filename)
 host_file=$(readlink -f $host_filename)
 log_path=${app_dir}/$log_dirname
 output_path=${app_dir}/$output_dirname
+
+# Mkdir
+if [ ! -d "$output_path" ]; then
+    mkdir -p $output_path
+fi
+if [ ! -d "$log_path" ]; then
+    mkdir -p $log_path
+fi
 
 ssh_options="-oStrictHostKeyChecking=no \
 -oUserKnownHostsFile=/dev/null \
@@ -101,8 +110,10 @@ for ip in $unique_host_list; do
       --lambda $lambda \
       --num_epochs $num_epochs\
       --minibatch_size $minibatch_size \
+      --num_iter_B_per_minibatch $num_iter_B_per_minibatch \
       --num_iter_S_per_minibatch $num_iter_S_per_minibatch \
       --num_eval_minibatch $num_eval_minibatch \
+      --num_eval_samples $num_eval_samples \
       --init_step_size_B $init_step_size_B \
       --step_size_offset_B $step_size_offset_B \
       --step_size_pow_B $step_size_pow_B \

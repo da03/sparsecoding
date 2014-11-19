@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
-# Input files:
-host_filename="../../machinefiles/localserver"
+if [ $# -ne 1 ]; then
+    echo "Usage: $0 <petuum_ps_hostfile>"
+    echo ""
+    echo "Kills hung Sparse Coding clients"
+    exit
+fi
+host_file=`readlink -f $1`
 
 # Figure out the paths.
 script_path=`readlink -f $0`

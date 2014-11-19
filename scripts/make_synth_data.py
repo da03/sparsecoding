@@ -1,7 +1,7 @@
 #!/usr/bin/python
 import os, sys, random
 
-if len(sys.argv) <> 5:
+if len(sys.argv) < 5:
     print 'Creates synthetic data to test the Petuum Sparse Coding application'
     print ''
     print 'Usage: python %s <data-dimension> <data-size> <dictionary-size> <output-file> [num_nonzero]' % sys.argv[0]
@@ -15,7 +15,7 @@ output_file = sys.argv[4]
 if len(sys.argv) < 6:
     num_nonzero = 1
 else:
-    num_nonzero = sys.argv[5]
+    num_nonzero = int(sys.argv[5])
 
 # Generate random dictionary elements with l2-norm 1
 dictionary = [[0.0 for j in range(0, m)] for i in range(0, k)]

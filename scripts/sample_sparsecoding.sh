@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # Input files:
-host_filename="../../machinefiles/cogtwo"
-data_filename="scripts/mat.txt"
+host_filename="../../machinefiles/localserver"
+data_filename="sample/data/sample.txt"
 is_partitioned=false
 data_format="text"
 
 # Ouput files:
-output_dirname="output_sample"
-log_dirname="log_sample"
+output_dirname="sample/output"
+log_dirname="sample/log"
 
 # Sparse Coding parameters:
 # Objective function parameters
@@ -17,6 +17,7 @@ dictionary_size=6
 c=1.0
 lambda=0.1
 # Optimization parameters
+num_epochs=30
 minibatch_size=1
 init_step_size_B=0.001
 step_size_offset_B=0.0
@@ -29,11 +30,9 @@ step_size_pow_S=0.0
 # Evaluation parameters
 num_eval_minibatch=100
 num_eval_samples=100
-# Execution parameters
-num_worker_threads=1
-num_epochs=100
 
 # System parameters:
+num_worker_threads=4
 staleness=0
 table_staleness=$staleness
 
@@ -43,11 +42,26 @@ script_dir=`dirname $script_path`
 app_dir=`dirname $script_dir`
 progname=sparsecoding_main
 prog_path=$app_dir/bin/$progname
-data_file=$(readlink -f $data_filename)
+data_dir=`dirname $data_filename`
+data_path=${app_dir}/${data_dir}
 host_file=$(readlink -f $host_filename)
 log_path=${app_dir}/$log_dirname
 output_path=${app_dir}/$output_dirname
 
+# Mkdir and generate sample data
+if [ ! -d "$output_path" ]; then
+    mkdir -p $output_path
+fi
+if [ ! -d "$log_path" ]; then
+    mkdir -p $log_path
+fi
+if [ ! -d "$data_path" ]; then
+    mkdir -p $data_path
+fi
+echo "Generating sample data ${data_file}"
+python $script_dir/make_synth_data.py $m $n $dictionary_size ${app_dir}/${data_filename} 1
+echo "Sample data generated, m = $m, n = $n, k = $dictionary_size"
+data_file=$(readlink -f $data_filename)
 ssh_options="-oStrictHostKeyChecking=no \
 -oUserKnownHostsFile=/dev/null \
 -oLogLevel=quiet"
