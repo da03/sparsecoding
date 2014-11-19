@@ -17,13 +17,12 @@ dictionary_size=6
 c=1.0
 lambda=0.1
 # Optimization parameters
-num_epochs=30
+num_epochs=500
 minibatch_size=1
 init_step_size_B=0.001
 step_size_offset_B=0.0
 step_size_pow_B=0.0
-num_iter_B_per_minibatch=100
-num_iter_S_per_minibatch=100
+num_iter_S_per_minibatch=10
 init_step_size_S=0.001
 step_size_offset_S=0.0
 step_size_pow_S=0.0
@@ -116,7 +115,6 @@ for ip in $unique_host_list; do
       --lambda $lambda \
       --num_epochs $num_epochs\
       --minibatch_size $minibatch_size \
-      --num_iter_B_per_minibatch $num_iter_B_per_minibatch \
       --num_iter_S_per_minibatch $num_iter_S_per_minibatch \
       --num_eval_minibatch $num_eval_minibatch \
       --num_eval_samples $num_eval_samples \

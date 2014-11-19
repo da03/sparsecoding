@@ -46,8 +46,6 @@ namespace sparsecoding {
         init_step_size_B_ = context.get_double("init_step_size_B");
         step_size_offset_B_ = context.get_double("step_size_offset_B");
         step_size_pow_B_ = context.get_double("step_size_pow_B");
-        num_iter_B_per_minibatch_ = 
-            context.get_int32("num_iter_B_per_minibatch");
         num_iter_S_per_minibatch_ = 
             context.get_int32("num_iter_S_per_minibatch");
         init_step_size_S_ = context.get_double("init_step_size_S");
@@ -380,13 +378,10 @@ namespace sparsecoding {
                             Sj_inc_debug[iter_S] += Sj_inc.array().abs().matrix().sum() / dictionary_size_;
                         }
                         // update B
-                        for (int iter_B = 0; 
-                                iter_B < num_iter_B_per_minibatch_; ++iter_B) {
-			                Xj_inc = Xj - petuum_table_cache * Sj;
-			                petuum_update_cache.noalias() += 
-                                step_size_B * Xj_inc * Sj.transpose();
-                            petuum_table_cache.noalias() += step_size_B * Xj_inc * Sj.transpose();
-                        }
+			            Xj_inc = Xj - petuum_table_cache * Sj;
+			            petuum_update_cache.noalias() += 
+                            step_size_B * Xj_inc * Sj.transpose();
+                        //petuum_table_cache.noalias() += step_size_B * Xj_inc * Sj.transpose();
                     }
                 }
 		        // calculate updates

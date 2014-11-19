@@ -41,8 +41,6 @@ DEFINE_int32(num_eval_minibatch, 10, "Evaluate obj per how many minibatches. "
         "Default value is 10."); 
 DEFINE_int32(num_eval_samples, 10, "Evaluate obj by sampling how many points."
         " Default value is 10."); 
-DEFINE_int32(num_iter_B_per_minibatch, 10, 
-        "How many iterations for B per minibatch. Default value is 10."); 
 DEFINE_int32(num_iter_S_per_minibatch, 10, 
         "How many iterations for S per minibatch. Default value is 10."); 
 DEFINE_double(init_step_size_B, 0.5, "SGD step size for B at iteration t is "

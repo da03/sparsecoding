@@ -23,7 +23,6 @@ minibatch_size=100
 init_step_size_B=0.01
 step_size_offset_B=50
 step_size_pow_B=0.0
-num_iter_B_per_minibatch=1
 num_iter_S_per_minibatch=100
 init_step_size_S=0.1
 step_size_offset_S=50
@@ -110,7 +109,6 @@ for ip in $unique_host_list; do
       --lambda $lambda \
       --num_epochs $num_epochs\
       --minibatch_size $minibatch_size \
-      --num_iter_B_per_minibatch $num_iter_B_per_minibatch \
       --num_iter_S_per_minibatch $num_iter_S_per_minibatch \
       --num_eval_minibatch $num_eval_minibatch \
       --num_eval_samples $num_eval_samples \
