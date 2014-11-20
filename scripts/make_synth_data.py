@@ -4,7 +4,18 @@ import os, sys, random
 if len(sys.argv) < 5:
     print 'Creates synthetic data to test the Petuum Sparse Coding application'
     print ''
-    print 'Usage: python %s <data-dimension> <data-size> <dictionary-size> <output-file> [num_nonzero]' % sys.argv[0]
+    print 'Usage: python %s <data-dimension> <data-size> <dictionary-size> <output-file> [<num_nonzero>]' % sys.argv[0]
+    print ''
+    print ('The data generating process is: Generate <dictionary-size> dictionary elements with unit norm first. '
+          'Then generate <data-size> data points by choosing and adding <num_nonzero> dictionary elements together. '
+          'The default value for <num-nonzero> is 1.')
+    print ''
+    print ('As the generated dictionary matrix satisfy the constraint that each row\'s l2-norm is equal to 1, we have '
+           'constructed a feasible solution for the sparse coding problem when m=<data-dimension>, n=<data-size>, '
+           'data_file=<output_file>, dicionary_size=<dictionary-size>, c=1. The objective function value at that '
+           'feasible solution is lambda*<num_nonzero>, so the optimal objective function value for the sparse coding ' 
+           'problem shall be smaller than or equal to lambda*<num_nonzero>. So the generated synthetic data can be '
+           'used to test Sparse Coding application. ')
     print ''
     sys.exit(1)
 
