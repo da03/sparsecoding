@@ -1,4 +1,4 @@
-# Sparse Coding makefile
+# Sparse Coding Makefile
 
 # Figure out app path
 SPARSECODING_DIR := $(shell readlink $(dir $(lastword $(MAKEFILE_LIST))) -f)
