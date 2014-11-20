@@ -8,13 +8,19 @@
 
 // Elements whose absolute value is smaller than INFINITESIMAL stored in matrix 
 // would be considered 0 after performing function IncCol() on that column
+#ifndef INFINITESIMAL
 #define INFINITESIMAL 0.00001
+#endif
 // Elements cannot exceed MAXELEVAL to prevent overflow, 
 // activates after performing function IncCol() on a given column
+#ifndef MAXELEVAL
 #define MAXELEVAL 100000.0
+#endif
 // Elements cannot be smaller than MAXELEVAL to prevent overflow, 
 // activates after performing function IncCol() on a given column
+#ifndef MINELEVAL
 #define MINELEVAL -100000.0
+#endif
 
 namespace sparsecoding {
 

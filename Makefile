@@ -1,18 +1,32 @@
+# Sparse Coding makefile
+
+# Figure out app path
 SPARSECODING_DIR := $(shell readlink $(dir $(lastword $(MAKEFILE_LIST))) -f)
 PETUUM_ROOT = $(SPARSECODING_DIR)/../../
 
 include $(PETUUM_ROOT)/defns.mk
 
+# Define macros in src/matrix_loader.hpp
+# Element in matrix whose absolute value is smaller than INFINITESIMAL is 
+# considered 0, such that you will not see something like 1e-10 in the
+# result of coefficients S
+PETUUM_CXXFLAGS += -DINFINITESIMAL=0.00001
+# Element in matrix is set to MAXELEVAL if its value exceeds MAXELEVAL
+# This bound is to prevent numeric overflow
+PETUUM_CXXFLAGS += -DMAXELEVAL=100000
+# Element in matrix is set to MINELEVAL if its value is lower than MINELEVAL
+# This bound is to prevent numeric overflow
+PETUUM_CXXFLAGS += -DMINELEVAL=-100000
+
 SPARSECODING_SRC = $(wildcard $(SPARSECODING_DIR)/src/*.cpp)
 SPARSECODING_HDR = $(wildcard $(SPARSECODING_DIR)/src/*.hpp)
-UTIL_SRC = $(wildcard $(SPARSECODING_DIR)/src/util/*.cpp)
-UTIL_HDR = $(wildcard $(SPARSECODING_DIR)/src/util/*.hpp)
 SPARSECODING_BIN = $(SPARSECODING_DIR)/bin
 SPARSECODING_OBJ = $(SPARSECODING_SRC:.cpp=.o)
-UTIL_OBJ= $(UTIL_SRC:.cpp=.o)
-# PETUUM_CXXFLAGS:=$(PETUUM_CXXFLAGS) -fopenmp
+UTIL_SRC = $(wildcard $(SPARSECODING_DIR)/src/util/*.cpp)
+UTIL_HDR = $(wildcard $(SPARSECODING_DIR)/src/util/*.hpp)
+UTIL_OBJ = $(UTIL_SRC:.cpp=.o)
 
-)all: sparsecoding_main
+all: sparsecoding_main
 
 sparsecoding_main: $(SPARSECODING_BIN)/sparsecoding_main
 
