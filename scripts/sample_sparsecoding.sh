@@ -32,8 +32,10 @@ num_eval_samples=100
 
 # System parameters:
 num_worker_threads=4
-staleness=0
-table_staleness=$staleness
+table_staleness=0
+maximum_running_time=0.0
+load_cache=false
+cache_dirname="N/A"
 
 # Figure out the paths.
 script_path=`readlink -f $0`
@@ -46,6 +48,7 @@ data_path=${app_dir}/${data_dir}
 host_file=$(readlink -f $host_filename)
 log_path=${app_dir}/$log_dirname
 output_path=${app_dir}/$output_dirname
+cache_path=${app_dir}/$cache_dirname
 
 # Mkdir and generate sample data
 if [ ! -d "$output_path" ]; then
@@ -61,6 +64,19 @@ echo "Generating sample data ${data_file}"
 python $script_dir/make_synth_data.py $m $n $dictionary_size ${app_dir}/${data_filename} 1
 echo "Sample data generated, m = $m, n = $n, k = $dictionary_size"
 data_file=$(readlink -f $data_filename)
+
+# Deal with booleans
+if [ "$is_partitioned" = true ]; then
+    flag_is_partitioned="is_partitioned"
+else
+    flag_is_partitioned="nois_partitioned"
+fi 
+if [ "$load_cache" = true ]; then
+    flag_load_cache="load_cache"
+else
+    flag_load_cache="noload_cache"
+fi 
+
 ssh_options="-oStrictHostKeyChecking=no \
 -oUserKnownHostsFile=/dev/null \
 -oLogLevel=quiet"
@@ -94,16 +110,16 @@ for ip in $unique_host_list; do
   #    setenv GLOG_log_dir $log_path; \
   #    setenv GLOG_v -1; \
   #    setenv GLOG_minloglevel 0; \
-  #    setenv GLOG_vmodule ""; \
+  #    setenv GLOG_vmodule ; \
   cmd="GLOG_logtostderr=false \
       GLOG_log_dir=$log_path \
       GLOG_v=-1
       GLOG_minloglevel=0 \
-      GLOG_vmodule="" \
+      GLOG_vmodule= \
       $prog_path \
       --hostfile $host_file \
       --data_file $data_file_client \
-      --is_partitioned $is_partitioned \
+      --$flag_is_partitioned \
       --data_format $data_format \
       --output_path $output_path \
       --num_clients $num_unique_hosts \
@@ -125,7 +141,10 @@ for ip in $unique_host_list; do
       --step_size_offset_S $step_size_offset_S \
       --step_size_pow_S $step_size_pow_S \
       --table_staleness $table_staleness \
-      --client_id ${client_id}"
+      --maximum_running_time $maximum_running_time
+      --$flag_load_cache
+      --cache_path $cache_path
+      --client_id $client_id"
   ssh $ssh_options $ip $cmd & 
   #eval $cmd  # Use this to run locally (on one machine).
 

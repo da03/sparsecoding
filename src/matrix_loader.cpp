@@ -69,6 +69,7 @@ void MatrixLoader<T>::Init(std::string data_file, std::string data_format,
                 }
                 if (j % num_clients == client_id) {
                     data_[j / num_clients][i] = temp;
+                    std::cout<<temp<<std::endl<<std::endl;
                 }
             }
         }

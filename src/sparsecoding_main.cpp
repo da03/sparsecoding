@@ -23,6 +23,16 @@ DEFINE_string(data_format, "", "Format of input matrix file"
 DEFINE_bool(is_partitioned, false, 
         "Whether or not the input file has been partitioned");
 DEFINE_string(output_path, "", "Output path. Must be an existing directory.");
+DEFINE_double(maximum_running_time, -1.0, "Maximum running hours. "
+        "Valid if it takes value greater than 0."
+        "App will try to terminate when running time exceeds "
+        "maximum_running_time, but it will take longer time to synchronize "
+        "tables on different clients and save results to disk.");
+DEFINE_bool(load_cache, false, "Whether or not to load B and S from cache file"
+        " in cache_dirname");
+DEFINE_string(cache_path, "", "Valid if load_cache is set to true. "
+        "Determine the path of directory containing cache to load B and S.");
+
 // Objective function parameters
 DEFINE_int32(m, 0, "Number of rows in input matrix. ");
 DEFINE_int32(n, 0, "Number of columns in input matrix. ");

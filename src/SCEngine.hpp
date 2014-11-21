@@ -1,7 +1,8 @@
 #pragma once
-#include<string>
-#include<atomic>
+#include <string>
+#include <atomic>
 #include <boost/date_time/posix_time/posix_time.hpp>
+#include <petuum_ps_common/include/petuum_ps.hpp>
 
 #include "matrix_loader.hpp"
 
@@ -16,6 +17,7 @@ class SCEngine {
 
         // petuum parameters
         int client_id_, num_clients_, num_worker_threads_;
+        float maximum_running_time_;
         
         // objective function parameters
         int dictionary_size_;
@@ -31,13 +33,24 @@ class SCEngine {
               init_step_size_S_, step_size_offset_S_, step_size_pow_S_;
 
         // input and output
-        std::string data_file_, data_format_, output_path_;
+        std::string data_file_, data_format_, output_path_, cache_path_;
         bool is_partitioned_;
+        bool load_cache_;
 
         // matrix loader for data X and dictionary S
         MatrixLoader<float> X_matrix_loader_, S_matrix_loader_;
 
         // timer
         boost::posix_time::ptime initT_;
+
+        // Save results to disk
+        void SaveResults(int thread_id, petuum::Table<float> & B_table, 
+                petuum::Table<float> & loss_table);
+       
+        // Init B with random values and normalize elements to have unit norm
+        void InitRand(int thread_id, petuum::Table<float> & B_table);
+
+        // Load B and S from disk
+        void LoadCache(int thread_id, petuum::Table<float> & B_table);
 };
 }; // namespace sparsecoding
