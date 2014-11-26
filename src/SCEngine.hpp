@@ -33,7 +33,8 @@ class SCEngine {
               init_step_size_S_, step_size_offset_S_, step_size_pow_S_;
 
         // input and output
-        std::string data_file_, data_format_, output_path_, cache_path_;
+        std::string data_file_, input_data_format_, output_path_, 
+            output_data_format_, cache_path_;
         bool is_partitioned_;
         bool load_cache_;
 

@@ -23,9 +23,10 @@ namespace sparsecoding {
         lda::Context & context = lda::Context::get_instance();
         // input and output
         data_file_ = context.get_string("data_file");
-        data_format_ = context.get_string("data_format");
+        input_data_format_ = context.get_string("input_data_format");
         is_partitioned_ = context.get_bool("is_partitioned");
         output_path_ = context.get_string("output_path");
+        output_data_format_ = context.get_string("output_data_format");
         maximum_running_time_ = context.get_double("maximum_running_time");
         load_cache_ = context.get_bool("load_cache");
         cache_path_ = context.get_string("cache_path");
@@ -62,9 +63,9 @@ namespace sparsecoding {
             n / num_clients_ + 1: n / num_clients_;
         // Init matrix loader of data matrix X
         if (is_partitioned_) {
-            X_matrix_loader_.Init(data_file_, data_format_, m, client_n);
+            X_matrix_loader_.Init(data_file_, input_data_format_, m, client_n);
         } else {
-            X_matrix_loader_.Init(data_file_, data_format_, m, n, 
+            X_matrix_loader_.Init(data_file_, input_data_format_, m, n, 
                     client_id_, num_clients_);
         }
 
@@ -75,7 +76,7 @@ namespace sparsecoding {
 
 	    int max_client_n = ceil(float(n) / num_clients_);
 	    int iter_minibatch = 
-            max_client_n / num_worker_threads_ / minibatch_size_ + 1;
+            ceil(float(max_client_n / num_worker_threads_) / minibatch_size_);
 	    num_eval_per_client_ = 
             (num_epochs_ * iter_minibatch - 1) 
               / num_eval_minibatch_ + 1;
@@ -126,7 +127,11 @@ namespace sparsecoding {
                     const petuum::DenseRow<float> & petuum_row = 
                         row_acc.Get<petuum::DenseRow<float> >();
                     petuum_row.CopyToVector(&petuum_row_cache);
-                    fout_loss << petuum_row_cache[0] << "\t";
+                    if (std::abs(petuum_row_cache[0]) > INFINITESIMAL) {
+                        fout_loss << petuum_row_cache[0] << "\t";
+                    } else {
+                        fout_loss << "N/A" << "\t";
+                    }
                 }
                 fout_loss << "\n";
             }
@@ -142,14 +147,26 @@ namespace sparsecoding {
                     const petuum::DenseRow<float> & petuum_row = 
                         row_acc.Get<petuum::DenseRow<float> >();
                     petuum_row.CopyToVector(&petuum_row_cache);
-                    fout_time << petuum_row_cache[0] << "\t";
+                    if (std::abs(petuum_row_cache[0]) > INFINITESIMAL) {
+                        fout_time << petuum_row_cache[0] << "\t";
+                    } else {
+                        fout_time << "N/A" << "\t";
+                    }
                 }
                 fout_time << "\n";
             }
 	        fout_time.close();
             // Write dictionary B to disk
-            std::string B_filename = output_path_ + "/B.txt";
-            fout_B.open(B_filename.c_str());
+            // with filename output_path_/B.[txt|bin]
+            if (output_data_format_ == "text") {
+                std::string B_filename = output_path_ + "/B.txt";
+                fout_B.open(B_filename.c_str());
+            } else if (output_data_format_ == "binary") {
+                std::string B_filename = output_path_ + "/B.bin";
+                fout_B.open(B_filename.c_str(), std::ios::binary);
+            } else {
+                LOG(FATAL) << "Unrecognized data format: " << output_data_format_;
+            }
             for (int row_id = 0; row_id < dictionary_size_; ++row_id) {
                 B_table.Get(row_id, &row_acc);
                 const petuum::DenseRow<float> & petuum_row = 
@@ -158,25 +175,47 @@ namespace sparsecoding {
                 // Regularize by C_
                 RegVec(petuum_row_cache, C_, B_row_cache);
                 for (int col_id = 0; col_id < m; ++col_id) {
-                    fout_B << B_row_cache[col_id] << "\t";
+                    if (output_data_format_ == "text") {
+                        fout_B << B_row_cache[col_id] << "\t";
+                    } else if (output_data_format_ == "binary") {
+                        fout_B.write(reinterpret_cast<char*> ( 
+                                &(B_row_cache[col_id])), 4);
+                    }
                 }
-                fout_B << "\n";
+                if (output_data_format_ == "text") {
+                    fout_B << "\n";
+                }
             }
             fout_B.close();
         }
         // Thread 0 of each client save that client's part of S 
-        // to output_path_/S.[txt|dat].client_id_
+        // to output_path_/S.[txt|bin].client_id_
         if (thread_id == 0) {
-            std::string S_filename = output_path_ + "/S.txt." 
-                + std::to_string(client_id_);
-            fout_S.open(S_filename.c_str());
+            if (output_data_format_ == "text") {
+                std::string S_filename = output_path_ + "/S.txt." 
+                    + std::to_string(client_id_);
+                fout_S.open(S_filename.c_str());
+            } else if (output_data_format_ == "binary") {
+                std::string S_filename = output_path_ + "/S.bin." 
+                    + std::to_string(client_id_);
+                fout_S.open(S_filename.c_str(), std::ios::binary);
+            } else {
+                LOG(FATAL) << "Unrecognized data format: " << output_data_format_;
+            }
             for (int col_id_client = 0; col_id_client < client_n; 
                     ++col_id_client) {
                 if (S_matrix_loader_.GetCol(col_id_client, S_cache)) {
                     for (int row_id = 0; row_id < dictionary_size_; ++row_id) {
-                        fout_S << S_cache[row_id] << "\t";
+                        if (output_data_format_ == "text") {
+                            fout_S << S_cache[row_id] << "\t";
+                        } else if (output_data_format_ == "binary") {
+                            fout_S.write(reinterpret_cast<char*> (
+                                    &(S_cache[row_id])), 4);
+                        }
                     }
-                    fout_S << "\n";
+                        if (output_data_format_ == "text") {
+                            fout_S << "\n";
+                        }
                 }
             }
             fout_S.close();
@@ -193,14 +232,28 @@ namespace sparsecoding {
 	        std::ifstream fout_B;
             std::vector<float> B_row_cache(m);
 
-	        std::string B_filename = cache_path_ + "/B.txt";
-            fout_B.open(B_filename.c_str());
+            std::string B_filename;
+            if (input_data_format_ == "text") {
+	            B_filename = cache_path_ + "/B.txt";
+                fout_B.open(B_filename.c_str());
+            } else if (input_data_format_ == "binary") {
+	            B_filename = cache_path_ + "/B.bin";
+                fout_B.open(B_filename.c_str(), std::ios::binary);
+            } else {
+                LOG(FATAL) << "Unrecognized data format: " << output_data_format_;
+            }
+
             CHECK(fout_B.good()) 
                 << "Cache file " << B_filename << " does not exist!";
             for (int row_id = 0; row_id < dictionary_size_; ++row_id) {
                 petuum::UpdateBatch<float> B_update;
                 for (int col_id = 0; col_id < m; ++col_id) {
-                    fout_B >> B_row_cache[col_id];
+                    if (input_data_format_ == "text") {
+                        fout_B >> B_row_cache[col_id];
+                    } else if (input_data_format_ == "binary") {
+                        fout_B.read(reinterpret_cast<char*> (
+                                &(B_row_cache[col_id])), 4);
+                    }
 			        B_update.Update(col_id, B_row_cache[col_id]);
                 }
 		        B_table.BatchInc(row_id, B_update);
@@ -213,9 +266,19 @@ namespace sparsecoding {
             std::vector<float> S_cache(dictionary_size_), 
                 S_inc_cache(dictionary_size_);
 
-            std::string S_filename = cache_path_ + "/S.txt." +
-                std::to_string(client_id_);
-       	    fout_S.open(S_filename.c_str());
+            std::string S_filename;
+            if (input_data_format_ == "text") {
+                S_filename = cache_path_ + "/S.txt." +
+                    std::to_string(client_id_);
+       	        fout_S.open(S_filename.c_str());
+            } else if (input_data_format_ == "binary") {
+                S_filename = cache_path_ + "/S.bin." +
+                    std::to_string(client_id_);
+       	        fout_S.open(S_filename.c_str(), std::ios::binary);
+            } else {
+                LOG(FATAL) << "Unrecognized data format: " << output_data_format_;
+            }
+
             CHECK(fout_S.good()) 
                 << "Cache file " << S_filename << " does not exist!";
        	    for (int col_id_client = 0; col_id_client < client_n; 
@@ -223,7 +286,12 @@ namespace sparsecoding {
        	        if (S_matrix_loader_.GetCol(col_id_client, S_cache)) {
        	            for (int row_id = 0; row_id < dictionary_size_; 
                             ++row_id) {
-       	                fout_S >> S_inc_cache[row_id];
+                        if (input_data_format_ == "text") {
+       	                    fout_S >> S_inc_cache[row_id];
+                        } else if (input_data_format_ == "binary") {
+                            fout_S.read(reinterpret_cast<char*> (
+                                &(S_inc_cache[row_id])), 4);
+                        }
 			            S_inc_cache[row_id] = 
                             S_inc_cache[row_id] - S_cache[row_id];
        	            }
@@ -380,9 +448,6 @@ namespace sparsecoding {
                     LOG(INFO) << "iter: " << num_minibatch << ", client " 
                         << client_id_ << ", thread " << thread_id <<
                         " average loss: " << obj;
-                    LOG(INFO) << "iter: " << num_minibatch << ", client " 
-                        << client_id_ << "/" << num_clients_ <<" obj 1: " << 
-                        obj1 / num_samples << " obj2: "<< obj2/num_samples;
                     // update loss table
                     loss_table.Inc(client_id_ * num_eval_per_client_ + 
                             num_minibatch / num_eval_minibatch_,  0, 
@@ -438,7 +503,6 @@ namespace sparsecoding {
 			            Xj_inc = Xj - petuum_table_cache * Sj;
 			            petuum_update_cache.noalias() += 
                             step_size_B * Xj_inc * Sj.transpose();
-                        //petuum_table_cache.noalias() += step_size_B * Xj_inc * Sj.transpose();
                     }
                 }
 		        // calculate updates

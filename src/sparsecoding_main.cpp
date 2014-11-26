@@ -18,11 +18,13 @@ DEFINE_int32(num_comm_channels_per_client, 2,
 /* Sparse Coding Parameters */
 // Input and Output
 DEFINE_string(data_file, "", "Input matrix.");
-DEFINE_string(data_format, "", "Format of input matrix file"
+DEFINE_string(input_data_format, "", "Format of input matrix file"
         ", can be \"binary\" or \"text\".");
 DEFINE_bool(is_partitioned, false, 
         "Whether or not the input file has been partitioned");
 DEFINE_string(output_path, "", "Output path. Must be an existing directory.");
+DEFINE_string(output_data_format, "", "Format of output matrix file"
+        ", can be \"binary\" or \"text\".");
 DEFINE_double(maximum_running_time, -1.0, "Maximum running hours. "
         "Valid if it takes value greater than 0."
         "App will try to terminate when running time exceeds "
@@ -146,7 +148,8 @@ int main(int argc, char * argv[]) {
     // loss table. Single column. Each column is loss in one iteration
     int max_client_n = ceil(float(FLAGS_n) / FLAGS_num_clients);
     int iter_minibatch = 
-        max_client_n / FLAGS_num_worker_threads / FLAGS_minibatch_size + 1;
+        ceil(float(max_client_n / FLAGS_num_worker_threads) 
+                / FLAGS_minibatch_size);
     int num_eval_per_client = 
         (FLAGS_num_epochs * iter_minibatch - 1) 
           / FLAGS_num_eval_minibatch + 1;

@@ -4,10 +4,14 @@ host_filename="../../machinefiles/localserver"
 data_filename="sample/data/sample.txt"
 is_partitioned=false
 data_format="text"
+input_data_format=$data_format
+load_cache=false
+cache_dirname="N/A"
 
 # Ouput files:
 output_dirname="sample/output"
 log_dirname="sample/log"
+output_data_format=$data_format
 
 # Sparse Coding parameters:
 # Objective function parameters
@@ -34,8 +38,6 @@ num_eval_samples=100
 num_worker_threads=4
 table_staleness=0
 maximum_running_time=0.0
-load_cache=false
-cache_dirname="N/A"
 
 # Figure out the paths.
 script_path=`readlink -f $0`
@@ -120,7 +122,8 @@ for ip in $unique_host_list; do
       --hostfile $host_file \
       --data_file $data_file_client \
       --$flag_is_partitioned \
-      --data_format $data_format \
+      --input_data_format $input_data_format \
+      --output_data_format $output_data_format \
       --output_path $output_path \
       --num_clients $num_unique_hosts \
       --num_worker_threads $num_worker_threads \
