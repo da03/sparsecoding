@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Input files:
-host_filename="../../machinefiles/cogtwo"
-data_filename="/home/yuntiand/downloads/imnet_feat.dat"
+host_filename="../../machinefiles/cog8"
+data_filename="/tank/projects/biglearning/pxie/mlr_svs/data/imnet/train/merge/imnet_feat.dat"
 is_partitioned=false
 data_format="binary"
 input_data_format=$data_format
@@ -9,36 +9,36 @@ load_cache=false
 cache_dirname="N/A"
 
 # Ouput files:
-output_dirname="output"
-log_dirname="log"
+output_dirname="output/8machine_s61"
+log_dirname="log/8machine_s61"
 output_data_format=$data_format
 
 # Sparse Coding parameters:
 # Objective function parameters
 m=21504
-#n=1266734
-n=126673
+n=1266734
+#n=12667
 dictionary_size=10000
 c=1.0
 lambda=0.01
 # Optimization parameters
 num_epochs=500
-minibatch_size=100
-init_step_size_B=0.01
+minibatch_size=30
+init_step_size_B=0.1
 step_size_offset_B=0.0
 step_size_pow_B=0.0
 num_iter_S_per_minibatch=10
-init_step_size_S=0.001
+init_step_size_S=0.01
 step_size_offset_S=0.0
 step_size_pow_S=0.0
 # Evaluation parameters
-num_eval_minibatch=5
-num_eval_samples=100
+num_eval_minibatch=1
+num_eval_samples=120
 
 # System parameters:
-num_worker_threads=4
-table_staleness=100
-maximum_running_time=0.0
+num_worker_threads=16
+table_staleness=8
+maximum_running_time=13.0
 
 # Figure out the paths.
 script_path=`readlink -f $0`
@@ -100,17 +100,16 @@ for ip in $unique_host_list; do
   else
       data_file_client=$data_file
   fi 
-  #cmd="GLOG_logtostderr=true \
-  #cmd="setenv GLOG_logtostderr false; \
-  #    setenv GLOG_log_dir $log_path; \
-  #    setenv GLOG_v -1; \
-  #    setenv GLOG_minloglevel 0; \
-  #    setenv GLOG_vmodule ; \
-  cmd="GLOG_logtostderr=false \
-      GLOG_log_dir=$log_path \
-      GLOG_v=-1
-      GLOG_minloglevel=0 \
-      GLOG_vmodule= \
+  #cmd="GLOG_logtostderr=false \
+  #    GLOG_log_dir=$log_path \
+  #    GLOG_v=-1
+  #    GLOG_minloglevel=0 \
+  #    GLOG_vmodule= \
+  cmd="setenv GLOG_logtostderr false; \
+      setenv GLOG_log_dir $log_path; \
+      setenv GLOG_v -1; \
+      setenv GLOG_minloglevel 0; \
+      setenv GLOG_vmodule ; \
       $prog_path \
       --hostfile $host_file \
       --data_file $data_file_client \

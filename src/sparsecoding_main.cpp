@@ -12,7 +12,7 @@ DEFINE_string(hostfile, "", "Path to file containing server ip:port.");
 DEFINE_int32(num_clients, 1, "Total number of clients");
 DEFINE_int32(num_worker_threads, 4, "Number of app threads in this client");
 DEFINE_int32(client_id, 0, "Client ID");
-DEFINE_int32(num_comm_channels_per_client, 2, 
+DEFINE_int32(num_comm_channels_per_client, 4, 
         "number of comm channels per client");
  
 /* Sparse Coding Parameters */
@@ -81,7 +81,7 @@ DEFINE_int32(table_staleness, 0, "Staleness for dictionary table."
 
 /* No need to change the following */
 DEFINE_string(stats_path, "", "Statistics output file.");
-DEFINE_string(consistency_model, "SSPPush", "SSP or SSPPush or ...");
+DEFINE_string(consistency_model, "SSP", "SSP or SSPPush or ...");
 DEFINE_int32(row_oplog_type, petuum::RowOpLogType::kDenseRowOpLog, 
         "row oplog type");
 DEFINE_bool(oplog_dense_serialized, true, "dense serialized oplog");
@@ -121,6 +121,7 @@ int main(int argc, char * argv[]) {
     // Load data
     STATS_APP_LOAD_DATA_BEGIN();
     sparsecoding::SCEngine sc_engine;
+LOG(INFO)<<"minibatch: "<<FLAGS_minibatch_size<<", S step: "<<FLAGS_init_step_size_S<<", B step: "<<FLAGS_init_step_size_B<<"S iter: "<<FLAGS_num_iter_S_per_minibatch;
     LOG(INFO) << "Data loaded!";
     STATS_APP_LOAD_DATA_END();
 
@@ -140,7 +141,7 @@ int main(int argc, char * argv[]) {
     table_config.table_info.dense_row_oplog_capacity = 
         table_config.table_info.row_capacity;
     table_config.thread_cache_capacity = 1;
-    table_config.oplog_capacity = 100;
+    table_config.oplog_capacity = 200;
 
     CHECK(petuum::PSTableGroup::CreateTable(0, table_config)) 
         << "Failed to create dictionary table";
@@ -154,7 +155,7 @@ int main(int argc, char * argv[]) {
         (FLAGS_num_epochs * iter_minibatch - 1) 
           / FLAGS_num_eval_minibatch + 1;
     table_config.table_info.row_type = 0;
-    table_config.table_info.table_staleness = 0;
+    table_config.table_info.table_staleness = 50;
     table_config.table_info.row_capacity = 1;
     table_config.process_cache_capacity = 
         num_eval_per_client * FLAGS_num_clients * 2;
@@ -164,7 +165,7 @@ int main(int argc, char * argv[]) {
     table_config.table_info.dense_row_oplog_capacity = 
         table_config.table_info.row_capacity;
     table_config.thread_cache_capacity = 1;
-    table_config.oplog_capacity = 100;
+    table_config.oplog_capacity = 200;
 
     CHECK(petuum::PSTableGroup::CreateTable(1, table_config))
         << "Failed to create loss table";

@@ -10,7 +10,7 @@ include $(PETUUM_ROOT)/defns.mk
 # Element in matrix whose absolute value is smaller than INFINITESIMAL is 
 # considered 0, such that you will not see something like 1e-10 in the
 # result of coefficients S
-PETUUM_CXXFLAGS += -DINFINITESIMAL=0.00001
+PETUUM_CXXFLAGS += -DINFINITESIMAL=0.000001
 # Element in matrix is set to MAXELEVAL if its value exceeds MAXELEVAL
 # This bound is to prevent numeric overflow
 PETUUM_CXXFLAGS += -DMAXELEVAL=100000

@@ -53,6 +53,8 @@ void MatrixLoader<T>::Init(std::string data_file, std::string data_format,
         // Read data from file
         T temp;
         for (int j = 0; j < n; ++j) {
+if (j % 10000 == 0)
+LOG(INFO)<<j/10000<<"e4 lines read!";
             for (int i = 0; i < m; ++i) {
                 if (data_format == "binary") {
                     fread(&temp, sizeof(T), 1, fp);
